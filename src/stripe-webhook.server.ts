@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { getUserByEmail, setUserPro } from "~/db.server";
+import { sendEmail, buildPurchaseConfirmationEmail } from "~/lib/email.server";
 
 /**
  * Process a Stripe webhook event.
@@ -73,6 +74,12 @@ export async function handleStripeWebhook(
 
   setUserPro(user.id, true);
   console.log(`[stripe-webhook] Activated Pro for user ${user.id} (${user.email})`);
+
+  // Send purchase confirmation email (fire-and-forget)
+  const confirm = buildPurchaseConfirmationEmail();
+  sendEmail({ to: user.email, subject: confirm.subject, html: confirm.html }).catch((err) => {
+    console.error("[stripe-webhook] Failed to send purchase confirmation:", err);
+  });
 
   return { status: 200, body: { received: true } };
 }

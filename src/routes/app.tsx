@@ -32,6 +32,7 @@ import {
   syncExchangeHoldingsFn,
   importCSVFn,
   getTransactionsFn,
+  sendAlertEmailFn,
 } from "~/server-fns";
 import {
   SYMBOL_MAP,
@@ -1075,6 +1076,8 @@ function App() {
           );
           // Mark triggered on server (fire-and-forget)
           markAlertTriggeredFn({ data: { alertId: alert.id } }).catch(() => {});
+          // Send email notification (fire-and-forget)
+          sendAlertEmailFn({ data: { symbol: alert.symbol, targetPrice: alert.target_price, currentPrice: price, direction: alert.direction } }).catch(() => {});
           // Remove from local state
           setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
           break; // Show one banner at a time

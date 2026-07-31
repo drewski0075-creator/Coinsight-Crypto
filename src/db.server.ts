@@ -182,6 +182,18 @@ try {
   db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_dedup ON transactions(user_id, exchange_source, tx_date, symbol, type, amount)");
 } catch { /* index may already exist */ }
 
+// Password reset tokens table
+db.run(`
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`);
+
 export default db;
 
 /* ------------------------------------------------------------------ */
@@ -917,4 +929,40 @@ export function syncExchangeHoldings(userId: number): void {
       ).run(userId, coinId, eh.symbol, coinName, eh.amount, portfolioId, eh.cost_basis, 0);
     }
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Password reset token helpers                                       */
+/* ------------------------------------------------------------------ */
+export function createPasswordResetToken(userId: number): string {
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+  db.prepare(
+    "INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+  ).run(userId, token, expiresAt);
+  // Clean up expired tokens
+  db.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").run(
+    new Date().toISOString(),
+  );
+  return token;
+}
+
+export function validateResetToken(token: string): number | null {
+  const row = db
+    .prepare(
+      "SELECT user_id FROM password_reset_tokens WHERE token = ? AND expires_at > ?",
+    )
+    .get(token, new Date().toISOString()) as { user_id: number } | undefined;
+  return row?.user_id ?? null;
+}
+
+export function consumeResetToken(token: string): void {
+  db.prepare("DELETE FROM password_reset_tokens WHERE token = ?").run(token);
+}
+
+export function resetUserPassword(userId: number, passwordHash: string): void {
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(
+    passwordHash,
+    userId,
+  );
 }
