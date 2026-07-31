@@ -1,11 +1,12 @@
 /**
  * CoinSight email utility — server-side only.
  *
- * Sends transactional emails via the platform inbox.
- * Falls back to writing emails to a local mail queue when no transport is available.
+ * Sends transactional emails via Resend API.
+ * Falls back to writing emails to a local mail queue when Resend is unavailable.
  */
 
-const FROM_ADDRESS = "coinsight-crypto-748798b6@ctomail.io";
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_ADDRESS = "CoinSight <coinsight-crypto-748798b6@ctomail.io>";
 const MAIL_QUEUE_DIR = new URL("../../data/emails/", import.meta.url).pathname;
 
 // Ensure queue directory exists
@@ -22,29 +23,35 @@ interface EmailOptions {
 }
 
 /**
- * Send an email. Attempts platform transport first, falls back to local queue.
+ * Send an email via Resend API. Falls back to local queue if Resend is unavailable.
  */
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; method: string }> {
   const { to, subject, html } = options;
 
-  // Try platform HTTP transport first
-  try {
-    const res = await fetch("http://localhost:2500/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to,
-        subject,
-        html,
-      }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.ok) {
-      return { success: true, method: "http" };
+  // Try Resend API first
+  if (RESEND_API_KEY) {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: FROM_ADDRESS,
+          to: [to],
+          subject,
+          html,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        return { success: true, method: "resend" };
+      }
+      console.error("[email] Resend API error:", await res.text());
+    } catch (err) {
+      console.error("[email] Resend transport error:", err);
     }
-  } catch {
-    // Platform transport not available — fall through to queue
   }
 
   // Fallback: write to local mail queue
