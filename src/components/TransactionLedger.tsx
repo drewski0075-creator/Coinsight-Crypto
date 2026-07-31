@@ -140,13 +140,13 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
       {isOpen && (
         <div className="border-t border-slate-100 dark:border-slate-700">
           {/* Filters row */}
-          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3 dark:border-slate-700">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 border-b border-slate-100 px-3 sm:px-5 py-3 dark:border-slate-700">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by symbol or notes..."
-              className="h-8 w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-xs placeholder-slate-400 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-500"
+              className="h-8 w-full sm:w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-xs placeholder-slate-400 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-500"
             />
             <select
               value={typeFilter}
@@ -216,14 +216,14 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                 <table className="min-w-full text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50 text-left dark:border-slate-700 dark:bg-slate-700/50">
-                      <th className="px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Date</th>
-                      <th className="px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Type</th>
-                      <th className="px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Symbol</th>
-                      <th className="px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Amount</th>
-                      <th className="px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">USD Value</th>
-                      <th className="px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Fee</th>
-                      <th className="px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Exchange</th>
-                      <th className="px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Notes</th>
+                      <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Date</th>
+                      <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Type</th>
+                      <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Symbol</th>
+                      <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Amount</th>
+                      <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">USD Value</th>
+                      <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Fee</th>
+                      <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Exchange</th>
+                      <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Notes</th>
                       <th className="w-8 px-1 py-1.5" />
                     </tr>
                   </thead>
@@ -233,19 +233,19 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                       const exBadge = EXCHANGE_BADGES[tx.exchange_source];
                       return (
                         <tr key={tx.id} className="py-0 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                          <td className="whitespace-nowrap px-3 py-1 text-slate-500 dark:text-slate-400">
+                          <td className="whitespace-nowrap px-2 sm:px-3 py-1 text-slate-500 dark:text-slate-400">
                             <span className="block">{formatDate(tx.tx_date)}</span>
                             <span className="block text-[10px] text-slate-400 dark:text-slate-500">{formatTime(tx.tx_date)}</span>
                           </td>
-                          <td className="px-3 py-1">
+                          <td className="px-2 sm:px-3 py-1">
                             <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${typeBadge.cls}`}>
                               {typeBadge.label}
                             </span>
                           </td>
-                          <td className="px-3 py-1 font-mono font-medium text-slate-900 dark:text-slate-100">{tx.symbol}</td>
-                          <td className="px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtCrypto(tx.amount)}</td>
-                          <td className="px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtUsd(tx.amount_usd)}</td>
-                          <td className="whitespace-nowrap px-3 py-1 text-right font-mono text-slate-500 dark:text-slate-400">
+                          <td className="px-2 sm:px-3 py-1 font-mono font-medium text-slate-900 dark:text-slate-100">{tx.symbol}</td>
+                          <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtCrypto(tx.amount)}</td>
+                          <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtUsd(tx.amount_usd)}</td>
+                          <td className="whitespace-nowrap px-2 sm:px-3 py-1 text-right font-mono text-slate-500 dark:text-slate-400">
                             {tx.fee > 0 ? (
                               <span>
                                 {fmtUsd(tx.fee)}
@@ -255,7 +255,7 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                               "—"
                             )}
                           </td>
-                          <td className="px-3 py-1">
+                          <td className="px-2 sm:px-3 py-1">
                             {exBadge ? (
                               <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${exBadge.cls}`}>
                                 {exBadge.label}
@@ -264,7 +264,7 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                               <span className="text-slate-400 dark:text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="max-w-[120px] truncate px-3 py-1 text-slate-500 dark:text-slate-400">
+                          <td className="max-w-[120px] truncate px-2 sm:px-3 py-1 text-slate-500 dark:text-slate-400">
                             {tx.notes || "—"}
                           </td>
                           <td className="px-1 py-1 text-center">
@@ -284,7 +284,7 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
               </div>
 
               {/* Summary footer */}
-              <div className="flex flex-wrap gap-4 border-t border-slate-100 px-5 py-2 dark:border-slate-700">
+              <div className="flex flex-wrap gap-2 sm:gap-4 border-t border-slate-100 px-3 sm:px-5 py-2 dark:border-slate-700">
                 <div>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">Total Buys: </span>
                   <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">{fmtUsd(summary.totalBuy)}</span>

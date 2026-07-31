@@ -187,8 +187,9 @@ export default function QuickToolsPanel(props: QuickToolsPanelProps) {
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
+      const isMobile = window.innerWidth < 640;
       setPosition({
-        x: Math.max(0, window.innerWidth - 498),
+        x: isMobile ? Math.max(0, (window.innerWidth - window.innerWidth * 0.95) / 2) : Math.max(0, window.innerWidth - 498),
         y: 80,
       });
     }
@@ -221,8 +222,9 @@ export default function QuickToolsPanel(props: QuickToolsPanelProps) {
       if (!dragRef.current) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
+      const panelWidth = Math.min(window.innerWidth * 0.95, 460);
       setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 480, dragRef.current.startPosX + dx)),
+        x: Math.max(0, Math.min(window.innerWidth - panelWidth, dragRef.current.startPosX + dx)),
         y: Math.max(0, Math.min(window.innerHeight - 60, dragRef.current.startPosY + dy)),
       });
     };
@@ -253,7 +255,7 @@ export default function QuickToolsPanel(props: QuickToolsPanelProps) {
         <button
           onClick={toggleOpen}
           aria-label="Open Quick Tools"
-          className="fixed top-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-colors hover:bg-blue-700"
+          className="fixed right-4 top-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-colors hover:bg-blue-700 sm:right-6 sm:top-6"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -270,7 +272,7 @@ export default function QuickToolsPanel(props: QuickToolsPanelProps) {
       {open && (
         <div
           ref={panelRef}
-          className="fixed z-50 w-[460px] rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-600 dark:bg-slate-800"
+          className="fixed z-50 w-[95vw] max-w-[460px] rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-600 dark:bg-slate-800"
           style={{ left: position.x, top: position.y }}
         >
           {/* Drag handle + title + controls */}
