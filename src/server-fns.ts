@@ -36,10 +36,21 @@ import {
   getTransactions as dbGetTransactions,
   addTransactionsBatch as dbAddTransactionsBatch,
   deleteTransaction,
+  createPasswordResetToken,
+  validateResetToken,
+  consumeResetToken,
+  resetUserPassword,
 } from "~/db.server";
 import { SYMBOL_MAP } from "~/constants";
 import { getCached, setCache } from "~/lib/wallet-cache";
 import { parseCSV } from "~/lib/csv-parser";
+import {
+  sendEmail,
+  buildWelcomeEmail,
+  buildResetEmail,
+  buildAlertEmail,
+  buildPurchaseConfirmationEmail,
+} from "~/lib/email.server";
 import bcrypt from "bcryptjs";
 
 /* ------------------------------------------------------------------ */
@@ -75,6 +86,10 @@ export const signupFn = createServerFn().handler(
       path: "/",
       maxAge: 7 * 24 * 60 * 60,
     });
+
+    // Send welcome email (fire-and-forget)
+    const welcome = buildWelcomeEmail();
+    sendEmail({ to: user.email, subject: welcome.subject, html: welcome.html }).catch(() => {});
 
     return { success: true };
   },
@@ -256,6 +271,11 @@ export const activateProFn = createServerFn().handler(async () => {
   if (!user) throw new Error("Not authenticated");
 
   setUserPro(user.id, true);
+
+  // Send purchase confirmation email (fire-and-forget)
+  const confirm = buildPurchaseConfirmationEmail();
+  sendEmail({ to: user.email, subject: confirm.subject, html: confirm.html }).catch(() => {});
+
   return { success: true };
 });
 
@@ -889,3 +909,93 @@ export const deleteTransactionFn = createServerFn({ method: "POST" })
     deleteTransaction(user.id, data.txId);
     return { ok: true };
   });
+
+/* ------------------------------------------------------------------ */
+/*  Password reset: forgot password                                     */
+/* ------------------------------------------------------------------ */
+export const forgotPasswordFn = createServerFn().handler(
+  async (input: { data: { email: string } }) => {
+    const { email } = input.data;
+
+    if (!email || !email.includes("@")) {
+      return { success: false, error: "Please enter a valid email address." };
+    }
+
+    const user = getUserByEmail(email.toLowerCase().trim());
+    if (!user) {
+      // Don't reveal whether the email exists — always return success
+      return { success: true };
+    }
+
+    const resetToken = createPasswordResetToken(user.id);
+    const baseUrl =
+      process.env.SITE_URL ??
+      "https://b7b7222827a9407fadc1f53cb3561c0d.ctonew.app";
+    const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
+
+    const emailContent = buildResetEmail(resetLink);
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      html: emailContent.html,
+    });
+
+    return { success: true };
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/*  Password reset: reset password                                      */
+/* ------------------------------------------------------------------ */
+export const resetPasswordFn = createServerFn().handler(
+  async (input: {
+    data: { token: string; password: string };
+  }) => {
+    const { token, password } = input.data;
+
+    if (!token) {
+      return { success: false, error: "Invalid reset link." };
+    }
+    if (!password || password.length < 6) {
+      return { success: false, error: "Password must be at least 6 characters." };
+    }
+
+    const userId = validateResetToken(token);
+    if (!userId) {
+      return { success: false, error: "This reset link has expired or is invalid. Please request a new one." };
+    }
+
+    const passwordHash = bcrypt.hashSync(password, 10);
+    resetUserPassword(userId, passwordHash);
+
+    // Consume the token so it can't be reused
+    consumeResetToken(token);
+
+    return { success: true };
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/*  Email: send alert notification                                      */
+/* ------------------------------------------------------------------ */
+export const sendAlertEmailFn = createServerFn().handler(
+  async (input: {
+    data: { symbol: string; targetPrice: number; currentPrice: number; direction: string };
+  }) => {
+    const token = getCookie("coinsight_session");
+    if (!token) throw new Error("Not authenticated");
+    const user = validateSession(token);
+    if (!user) throw new Error("Not authenticated");
+
+    const { symbol, targetPrice, currentPrice, direction } = input.data;
+    const emailContent = buildAlertEmail(symbol, targetPrice, currentPrice, direction);
+
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      html: emailContent.html,
+    });
+
+    return { success: true };
+  },
+);
