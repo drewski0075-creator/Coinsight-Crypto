@@ -124,7 +124,7 @@ export function buildWelcomeEmail(): { subject: string; html: string } {
       <strong>Free tier:</strong> Track up to 10 coins with real-time prices, portfolio dashboard, and sparkline charts.
     </p>
     <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#475569;">
-      <strong>CoinSight Pro ($7.99 one-time):</strong> Unlimited coins, price alerts, CSV import, wallet tracking, exchange holdings, and more.
+      <strong>CoinSight Pro:</strong> Choose Monthly ($7.99/month) or Annual ($80/year — save 17%). Unlock unlimited coins, price alerts, CSV import, wallet tracking, exchange holdings, and more.
     </p>
     <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
       Ready to start tracking? Head to your dashboard and add your first holding.

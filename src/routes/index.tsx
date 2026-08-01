@@ -136,10 +136,20 @@ function Home() {
             CoinSight Pro
           </span>
           <h2 className="mb-4 text-3xl font-bold text-slate-900 dark:text-slate-100">
-            Unlock the Full Toolkit — $7.99
+            Unlock the Full Toolkit
           </h2>
+          <div className="mx-auto mb-4 grid max-w-sm grid-cols-2 gap-3 text-left">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-700">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Monthly</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100">$7.99<span className="text-xs font-normal text-slate-500">/mo</span></p>
+            </div>
+            <div className="rounded-lg border-2 border-blue-500 bg-blue-50 p-3 text-left dark:bg-blue-900/20">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Annual · Best Value</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100">$80<span className="text-xs font-normal text-slate-500">/yr</span></p>
+            </div>
+          </div>
           <p className="mb-8 text-lg text-slate-600 dark:text-slate-400">
-            One-time payment. Lifetime access. No subscriptions, no hidden fees.
+            Choose monthly flexibility or save 17% with an annual plan. Cancel monthly anytime.
           </p>
           <ul className="mx-auto mb-8 max-w-md space-y-3 text-left">
             <li className="flex items-start gap-3">
