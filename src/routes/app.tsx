@@ -675,11 +675,21 @@ declare global {
   interface Window {
     ethereum?: {
       isMetaMask?: boolean;
+      isPhantom?: boolean;
+      isTrust?: boolean;
+      isCoinbaseWallet?: boolean;
+      isRainbow?: boolean;
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       on: (event: string, cb: (...args: unknown[]) => void) => void;
       removeListener: (event: string, cb: (...args: unknown[]) => void) => void;
       selectedAddress?: string;
       chainId?: string;
+    };
+    phantom?: {
+      solana?: {
+        connect: () => Promise<{ publicKey: { toString: () => string } }>;
+        disconnect: () => Promise<void>;
+      };
     };
   }
 }
@@ -2689,6 +2699,117 @@ function MyWalletsSection({
     }
   };
 
+  // Phantom connect — try Solana first, fallback to EVM
+  const handlePhantomConnect = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      // Try Solana provider first (Phantom is best known for Solana)
+      const phantomSol = window.phantom?.solana;
+      if (phantomSol) {
+        const resp = await phantomSol.connect();
+        const addr = resp.publicKey.toString();
+        if (!addr) throw new Error("No Solana address found");
+        setNewLabel("Phantom (Solana)");
+        setNewAddress(addr);
+        setShowAddForm(true);
+        return;
+      }
+      // Fallback to EVM provider
+      const ethereum = window.ethereum;
+      if (ethereum?.isPhantom) {
+        const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
+        if (!accounts || accounts.length === 0) throw new Error("No accounts found");
+        setNewLabel("Phantom");
+        setNewAddress(accounts[0]);
+        setShowAddForm(true);
+        return;
+      }
+      throw new Error("Phantom not detected. Install the Phantom extension.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to connect";
+      if (msg.includes("User rejected") || msg.includes("denied")) {
+        setError("Connection rejected. Please approve the connection request in your wallet.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trust Wallet connect
+  const handleTrustWalletConnect = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const ethereum = window.ethereum;
+      if (!ethereum?.isTrust) throw new Error("Trust Wallet not detected. Install the Trust Wallet extension.");
+      const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
+      if (!accounts || accounts.length === 0) throw new Error("No accounts found");
+      setNewLabel("Trust Wallet");
+      setNewAddress(accounts[0]);
+      setShowAddForm(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to connect";
+      if (msg.includes("User rejected") || msg.includes("denied")) {
+        setError("Connection rejected. Please approve the connection request in your wallet.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Coinbase Wallet connect
+  const handleCoinbaseWalletConnect = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const ethereum = window.ethereum;
+      if (!ethereum?.isCoinbaseWallet) throw new Error("Coinbase Wallet not detected. Install the Coinbase Wallet extension.");
+      const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
+      if (!accounts || accounts.length === 0) throw new Error("No accounts found");
+      setNewLabel("Coinbase Wallet");
+      setNewAddress(accounts[0]);
+      setShowAddForm(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to connect";
+      if (msg.includes("User rejected") || msg.includes("denied")) {
+        setError("Connection rejected. Please approve the connection request in your wallet.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Rainbow connect
+  const handleRainbowConnect = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const ethereum = window.ethereum;
+      if (!ethereum?.isRainbow) throw new Error("Rainbow not detected. Install the Rainbow extension.");
+      const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
+      if (!accounts || accounts.length === 0) throw new Error("No accounts found");
+      setNewLabel("Rainbow");
+      setNewAddress(accounts[0]);
+      setShowAddForm(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to connect";
+      if (msg.includes("User rejected") || msg.includes("denied")) {
+        setError("Connection rejected. Please approve the connection request in your wallet.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Compute aggregated totals
   const walletTotalUsd = useMemo(() => {
     let total = 0;
@@ -2896,7 +3017,51 @@ function MyWalletsSection({
                 disabled={loading}
                 className="rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50 dark:border-orange-800/50 dark:bg-orange-900/20 dark:text-orange-300 dark:hover:bg-orange-900/30"
               >
-                {loading ? "Connecting..." : "🦊 Connect Browser Wallet"}
+                {loading ? "Connecting..." : "🦊 MetaMask"}
+              </button>
+            )}
+
+            {/* Phantom connect button */}
+            {!showAddForm && (
+              <button
+                onClick={handlePhantomConnect}
+                disabled={loading}
+                className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-100 disabled:opacity-50 dark:border-purple-800/50 dark:bg-purple-900/20 dark:text-purple-300 dark:hover:bg-purple-900/30"
+              >
+                {loading ? "Connecting..." : "👻 Phantom"}
+              </button>
+            )}
+
+            {/* Trust Wallet connect button */}
+            {!showAddForm && (
+              <button
+                onClick={handleTrustWalletConnect}
+                disabled={loading}
+                className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
+              >
+                {loading ? "Connecting..." : "🛡️ Trust Wallet"}
+              </button>
+            )}
+
+            {/* Coinbase Wallet connect button */}
+            {!showAddForm && (
+              <button
+                onClick={handleCoinbaseWalletConnect}
+                disabled={loading}
+                className="rounded-lg border border-blue-400 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
+              >
+                {loading ? "Connecting..." : "🔷 Coinbase"}
+              </button>
+            )}
+
+            {/* Rainbow connect button */}
+            {!showAddForm && (
+              <button
+                onClick={handleRainbowConnect}
+                disabled={loading}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800/50 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/30"
+              >
+                {loading ? "Connecting..." : "🌈 Rainbow"}
               </button>
             )}
 
