@@ -6,7 +6,7 @@
  */
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_ADDRESS = "CoinSight <coinsight-crypto-748798b6@ctomail.io>";
+const FROM_ADDRESS = "CoinSight <noreply@coinsight-crypto.com>";
 const MAIL_QUEUE_DIR = new URL("../../data/emails/", import.meta.url).pathname;
 
 // Ensure queue directory exists
