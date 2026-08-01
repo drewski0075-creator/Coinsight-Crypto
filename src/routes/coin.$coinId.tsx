@@ -307,7 +307,7 @@ function CoinDetailPage() {
           }}
           className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
         >
-          {"←"} Back to Dashboard
+          {"←"} Back
         </a>
 
         {/* Hero section */}
