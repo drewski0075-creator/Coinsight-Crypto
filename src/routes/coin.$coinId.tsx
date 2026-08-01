@@ -295,14 +295,20 @@ function CoinDetailPage() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-8">
-        {/* Back link */}
-        <Link
-          to="/app"
-          preload="intent"
+        <a
+          href="/app"
+          onClick={(e) => {
+            e.preventDefault();
+            if (typeof window !== "undefined" && window.top !== window.self) {
+              window.top!.location.href = "/app";
+            } else {
+              window.location.href = "/app";
+            }
+          }}
           className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
         >
-          {"\u2190"} Back to Dashboard
-        </Link>
+          {"←"} Back to Dashboard
+        </a>
 
         {/* Hero section */}
         <div className="mb-8 flex flex-wrap items-center gap-5">
