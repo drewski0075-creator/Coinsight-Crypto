@@ -655,7 +655,8 @@ const PortfolioPerformanceCard = React.memo(function PortfolioPerformanceCard({
 const STORAGE_KEY = "coinsight-holdings";
 const PRO_KEY = "coinsight_pro";
 const BANNER_DISMISSED_KEY = "coinsight_banner_dismissed";
-const STRIPE_URL = "https://buy.stripe.com/aFafZg7qN76xdUO5oC38403";
+const MONTHLY_STRIPE_URL = "https://buy.stripe.com/00w28qaCZfD33gabN038406";
+const ANNUAL_STRIPE_URL = "https://buy.stripe.com/aFa7sKdPb0I9dUOaIW38405";
 const FREE_LIMIT = 10;
 
 /*
@@ -2478,24 +2479,22 @@ function App() {
                 </li>
               </ul>
 
-              {/* Price */}
-              <div className="mb-4 rounded-xl bg-slate-50 p-4 text-center dark:bg-slate-700">
-                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">$7.99</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  One-time charge — not a recurring subscription. $7.99 unlocks
-                  Pro features on your account.
-                </p>
+              {/* Plan picker */}
+              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-600 dark:bg-slate-700">
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Monthly</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">$7.99<span className="text-sm font-normal text-slate-500 dark:text-slate-400">/month</span></p>
+                  <p className="mt-1 min-h-10 text-xs text-slate-500 dark:text-slate-400">Flexible, cancel anytime</p>
+                  <a href={MONTHLY_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="mt-3 block rounded-lg border border-blue-600 px-3 py-2 text-center text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30">Subscribe</a>
+                </div>
+                <div className="relative rounded-xl border-2 border-blue-500 bg-blue-50 p-4 dark:bg-blue-900/20">
+                  <span className="absolute -top-3 right-3 rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white">Best Value</span>
+                  <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">Annual</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">$80<span className="text-sm font-normal text-slate-500 dark:text-slate-400">/year</span></p>
+                  <p className="mt-1 min-h-10 text-xs text-blue-700 dark:text-blue-300">Save 17% — two months free</p>
+                  <a href={ANNUAL_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="mt-3 block rounded-lg bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-blue-700">Subscribe</a>
+                </div>
               </div>
-
-              {/* CTA */}
-              <a
-                href={STRIPE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mb-3 block w-full rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-              >
-                Get Pro — $7.99
-              </a>
 
               {/* Manual activation */}
               <p className="mb-2 text-center text-xs text-slate-400 dark:text-slate-500">
