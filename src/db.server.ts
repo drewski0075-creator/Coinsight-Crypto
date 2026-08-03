@@ -133,9 +133,16 @@ db.run(`
     address TEXT NOT NULL,
     blockchain TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now')),
+    last_synced_at TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
 `);
+
+// Migration: track wallet balance freshness for existing address-book entries
+let walletColumns = db.prepare("PRAGMA table_info(wallet_addresses)").all() as { name: string }[];
+if (!walletColumns.some((c) => c.name === "last_synced_at")) {
+  db.run("ALTER TABLE wallet_addresses ADD COLUMN last_synced_at TEXT");
+}
 
 // Add unique constraint on (user_id, address) — ignore if exists
 try {
@@ -1018,6 +1025,14 @@ export function removeFromWatchlist(id: number, userId: number): boolean {
 /* ------------------------------------------------------------------ */
 /*  Wallet holdings sync                                                */
 /* ------------------------------------------------------------------ */
+
+export function markWalletsSynced(userId: number, addresses: string[]): void {
+  if (!addresses.length) return;
+  const stmt = db.prepare("UPDATE wallet_addresses SET last_synced_at = ? WHERE user_id = ? AND address = ?");
+  const now = new Date().toISOString();
+  for (const address of addresses) stmt.run(now, userId, address);
+}
+
 export function syncWalletHoldings(
   userId: number,
   walletHoldings: { coinId: string; symbol: string; coinName: string; amount: number }[],
@@ -1154,6 +1169,31 @@ export function getPortfolioPnL(
     .all(userId, portfolioId) as any[];
 }
 
+export interface DataHealth {
+  costBasisCoverage: { tracked: number; total: number };
+  fifoReconciliation: { matched: number; total: number };
+  walletFreshness: { synced: number; total: number; oldestSync: string | null };
+  dataCompleteness: { pct: number };
+  overall: "high" | "attention" | "unverified";
+}
+
+export function getDataHealth(userId: number): DataHealth {
+  const basis = db.prepare("SELECT COUNT(*) as total, SUM(CASE WHEN COALESCE(cost_basis,0) > 0 THEN 1 ELSE 0 END) as tracked FROM holdings WHERE user_id = ?").get(userId) as any;
+  const sells = db.prepare("SELECT COUNT(*) as total, SUM(CASE WHEN realized_pnl IS NOT NULL THEN 1 ELSE 0 END) as matched FROM transactions WHERE user_id = ? AND lower(type) = 'sell'").get(userId) as any;
+  const wallets = db.prepare("SELECT COUNT(*) as total, SUM(CASE WHEN last_synced_at IS NOT NULL THEN 1 ELSE 0 END) as synced, MIN(last_synced_at) as oldestSync FROM wallet_addresses WHERE user_id = ?").get(userId) as any;
+  const tracked = Number(basis.tracked || 0), total = Number(basis.total || 0), matched = Number(sells.matched || 0), sellTotal = Number(sells.total || 0);
+  const walletTotal = Number(wallets.total || 0), walletSynced = Number(wallets.synced || 0);
+  const basisPct = total ? tracked / total : 1;
+  const fifoPct = sellTotal ? matched / sellTotal : 1;
+  const walletGreen = walletTotal === 0 || (walletSynced === walletTotal && !!wallets.oldestSync && Date.now() - new Date(wallets.oldestSync).getTime() <= 24 * 3600000);
+  const walletYellow = walletTotal === 0 || (walletSynced === walletTotal && !!wallets.oldestSync && Date.now() - new Date(wallets.oldestSync).getTime() <= 7 * 86400000);
+  const completeDenom = total + sellTotal;
+  const pct = completeDenom ? Math.round(((tracked + matched) / completeDenom) * 100) : 100;
+  const colors = [basisPct >= .8 ? "green" : basisPct >= .5 ? "yellow" : "red", matched === sellTotal ? "green" : matched > 0 ? "yellow" : "red", walletGreen ? "green" : walletYellow ? "yellow" : "red", pct >= 90 ? "green" : pct >= 60 ? "yellow" : "red"];
+  const reds = colors.filter((c) => c === "red").length, yellows = colors.filter((c) => c === "yellow").length;
+  return { costBasisCoverage: { tracked, total }, fifoReconciliation: { matched, total: sellTotal }, walletFreshness: { synced: walletSynced, total: walletTotal, oldestSync: wallets.oldestSync || null }, dataCompleteness: { pct }, overall: reds >= 2 || (reds === 1 && yellows === 0) ? "unverified" : yellows > 0 || reds > 0 ? "attention" : "high" };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Wallet address helpers                                             */
 /* ------------------------------------------------------------------ */
@@ -1164,6 +1204,7 @@ export interface WalletAddress {
   address: string;
   blockchain: string;
   created_at: string;
+  last_synced_at: string | null;
 }
 
 export function getWalletAddresses(userId: number): WalletAddress[] {

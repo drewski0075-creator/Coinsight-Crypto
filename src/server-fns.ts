@@ -39,6 +39,8 @@ import {
   deleteExchangeHolding as dbDeleteExchangeHolding,
   syncExchangeHoldings as dbSyncExchangeHoldings,
   getTransactions as dbGetTransactions,
+  getDataHealth,
+  markWalletsSynced,
   addTransactionsBatch as dbAddTransactionsBatch,
   deleteTransaction,
   createPasswordResetToken,
@@ -809,6 +811,8 @@ export const syncWalletBalancesFn = createServerFn().handler(async () => {
     }
   }
 
+  markWalletsSynced(user.id, balanceResults.map((b) => b.address));
+
   // Aggregate by symbol
   const agg: Record<string, number> = {};
   for (const b of balanceResults) {
@@ -1152,3 +1156,12 @@ export const sendAlertEmailFn = createServerFn().handler(
     return { success: true };
   },
 );
+
+/** Max-only reconciliation health summary. */
+export const getDataHealthFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session");
+  if (!token) throw new Error("Not authenticated");
+  const user = validateSession(token);
+  if (!user || !isUserMax(user.id)) throw new Error("Max subscription required");
+  return getDataHealth(user.id);
+});

@@ -37,6 +37,7 @@ import {
   getTransactionsFn,
   getPositionAuditFn,
   sendAlertEmailFn,
+  getDataHealthFn,
 } from "~/server-fns";
 import {
   SYMBOL_MAP,
@@ -47,6 +48,7 @@ import CsvImportSection from "~/components/CsvImportSection";
 import TransactionLedger from "~/components/TransactionLedger";
 import QuickToolsPanel from "~/components/QuickToolsPanel";
 import PositionHistoryDrawer, { type PositionAudit } from "~/components/PositionHistoryDrawer";
+import DataHealthCard, { type DataHealth } from "~/components/DataHealthCard";
 /* ------------------------------------------------------------------ */
 /*  Audit helpers (module scope)                                        */
 /* ------------------------------------------------------------------ */
@@ -872,6 +874,7 @@ function App() {
   const [isPro, setIsPro] = useState(false);
   const [isMax, setIsMax] = useState(false);
   const [lotsData, setLotsData] = useState<{ symbols: string[]; lots: Record<string, Lot[]>; totalLots: number } | null>(null);
+  const [dataHealth, setDataHealth] = useState<DataHealth | null>(null);
   const [realizedPnL, setRealizedPnL] = useState<{ perSymbol: RealizedPnLRow[]; totals: { proceeds: number; costBasis: number; realizedPnl: number } } | null>(null);
   /* -- Audit history state (Max only) ---------------------------------- */
   const [expandedHoldings, setExpandedHoldings] = useState<Set<number>>(new Set());
@@ -1208,6 +1211,12 @@ function App() {
       /* not a Max user */
     }
     try {
+      const health = await getDataHealthFn();
+      setDataHealth(health as DataHealth);
+    } catch {
+      setDataHealth(null);
+    }
+    try {
       const pnl = await getRealizedPnLFn();
       setRealizedPnL(pnl);
     } catch {
@@ -1221,6 +1230,7 @@ function App() {
     } else {
       setLotsData(null);
       setRealizedPnL(null);
+      setDataHealth(null);
     }
   }, [isMax, loadMaxData]);
 
@@ -2148,6 +2158,8 @@ function App() {
             </div>
           </div>
         </div>
+
+        {isMax && dataHealth && <DataHealthCard data={dataHealth} />}
 
         {/* Source Breakdown Row */}
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
