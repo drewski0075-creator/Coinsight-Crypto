@@ -4,11 +4,11 @@
 /*  Client-safe: pure string constants — safe to import from the UI.   */
 /* ------------------------------------------------------------------ */
 
-export const PRO_MONTHLY_PRICE_ID = "price_1U0OU3QtkCWYLwEd44ma13uR"; // $7.99/mo
-export const PRO_ANNUAL_PRICE_ID = "price_1U0OU4QtkCWYLwEdqNJACs0Q"; // $80/yr (save 17%)
-export const MAX_MONTHLY_PRICE_ID = "price_1U0OU4QtkCWYLwEdAtx2BhqH"; // $9.99/mo
-export const MAX_ANNUAL_PRICE_ID = "price_1U0OU4QtkCWYLwEd4YBn6VOF"; // $100/yr (save 17%)
-export const CLEANUP_PRICE_ID = "price_1U0OU4QtkCWYLwEdp3L66xEN"; // $39.99 one-time
+export const PRO_MONTHLY_PRICE_ID = "price_1U0OnmQtkCWYLwEdNFMC8LMr"; // $7.99/mo
+export const PRO_ANNUAL_PRICE_ID = "price_1U0OoSQtkCWYLwEdGRHFreOu"; // $80/yr (save 17%)
+export const MAX_MONTHLY_PRICE_ID = "price_1U0OnnQtkCWYLwEd9tRHmOrc"; // $9.99/mo
+export const MAX_ANNUAL_PRICE_ID = "price_1U0OoSQtkCWYLwEdWmVXVEbe"; // $100/yr (save 17%)
+export const CLEANUP_PRICE_ID = "price_1U0OnoQtkCWYLwEdXnPd0cpk"; // $39.99 one-time
 
 export type StripeTier = "pro" | "max" | "cleanup";
 
