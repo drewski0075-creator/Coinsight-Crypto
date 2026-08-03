@@ -74,12 +74,16 @@ export async function handleStripeWebhook(
     if (eventType === "checkout.session.completed") {
       const session = payload.data?.object;
       customerEmail = session?.customer_details?.email || session?.customer_email || null;
-      // Best-effort price detection in fallback mode (line_items are usually
-      // not included unless expanded; metadata may be present on custom links).
-      const linePrice = session?.line_items?.data?.[0]?.price?.id;
-      const metaPrice = session?.metadata?.price_id;
-      const metaMax = session?.metadata?.tier === "max";
-      priceId = linePrice || metaPrice || (metaMax ? "max" : null);
+      // Fallback: detect tier from amount_total (cents in Stripe payload).
+      // $7.99=Pro, $9.99=Max, $80=Pro Annual, $100=Max Annual.
+      const amountTotal = session?.amount_total;
+      if (amountTotal === 999 || amountTotal === 10000) {
+        priceId = amountTotal === 999
+          ? "price_1U0LSgD0dIs7UPrF72blI9cS"
+          : "price_1U0LT3D0dIs7UPrFVIv29G2J";
+      } else if (amountTotal === 799 || amountTotal === 8000) {
+        priceId = "pro";
+      }
     }
   }
 
