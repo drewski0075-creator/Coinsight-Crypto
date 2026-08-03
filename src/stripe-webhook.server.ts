@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { getUserByEmail, setUserPro, setUserMax } from "~/db.server";
+import { getUserByEmail, setUserPro, setUserMax, setUserCleanup } from "~/db.server";
 import { sendEmail, buildPurchaseConfirmationEmail } from "~/lib/email.server";
 
 /**
@@ -7,6 +7,8 @@ import { sendEmail, buildPurchaseConfirmationEmail } from "~/lib/email.server";
  * When a checkout completes against one of these, the user is granted
  * Max (which always implies Pro).
  */
+export const CLEANUP_PRICE_ID = "price_1U0NqYD0dIs7UPrFypcszsgi";
+
 export const MAX_PRICE_IDS = new Set<string>([
   "price_1U0LSgD0dIs7UPrF72blI9cS", // Max Monthly ($9.99)
   "price_1U0LT3D0dIs7UPrFVIv29G2J", // Max Annual ($100)
@@ -77,7 +79,8 @@ export async function handleStripeWebhook(
       // Fallback: detect tier from amount_total (cents in Stripe payload).
       // $7.99=Pro, $9.99=Max, $80=Pro Annual, $100=Max Annual.
       const amountTotal = session?.amount_total;
-      if (amountTotal === 999 || amountTotal === 10000) {
+      if (amountTotal === 3999) priceId = CLEANUP_PRICE_ID;
+      else if (amountTotal === 999 || amountTotal === 10000) {
         priceId = amountTotal === 999
           ? "price_1U0LSgD0dIs7UPrF72blI9cS"
           : "price_1U0LT3D0dIs7UPrFVIv29G2J";
@@ -105,7 +108,9 @@ export async function handleStripeWebhook(
     return { status: 404, body: { error: "User not found" } };
   }
 
+  const isCleanup = priceId === CLEANUP_PRICE_ID;
   const isMax = priceId != null && MAX_PRICE_IDS.has(priceId);
+  if (isCleanup) { setUserCleanup(user.id, true); console.log(`[stripe-webhook] Activated cleanup for user ${user.id}`); return { status: 200, body: { received: true, cleanup: true } }; }
   if (isMax) {
     setUserMax(user.id, true);
     console.log(`[stripe-webhook] Activated Max for user ${user.id} (${user.email})`);

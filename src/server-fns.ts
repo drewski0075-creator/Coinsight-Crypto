@@ -10,6 +10,12 @@ import {
   setUserPro,
   setUserMax,
   isUserMax,
+  setUserCleanup,
+  isUserCleanup,
+  deduplicateTransactions,
+  recomputeFIFOForSymbol,
+  recordCleanupUpload,
+  getCleanupSummary,
   getLots,
   getRealizedPnLSummary,
   getPositionAudit,
@@ -931,10 +937,8 @@ export const importCSVFn = createServerFn({ method: "POST" })
       throw new Error("Invalid request body");
     }
     const d = data as Record<string, unknown>;
-    if (typeof d.csvText !== "string" || !d.csvText.trim()) {
-      throw new Error("csvText must be a non-empty string");
-    }
-    return { csvText: d.csvText as string };
+    if (typeof d.csvText !== "string" || !d.csvText.trim()) { throw new Error("csvText must be a non-empty string"); }
+    return { csvText: d.csvText as string, filename: typeof d.filename === "string" ? d.filename : "import.csv" };
   })
   .handler(async ({ data }) => {
     const token = getCookie("coinsight_session");
@@ -971,6 +975,7 @@ export const importCSVFn = createServerFn({ method: "POST" })
 
     // Batch insert with dedup
     const result = dbAddTransactionsBatch(user.id, normalized);
+    if (data.filename) recordCleanupUpload(user.id, data.filename);
 
     return {
       format,
@@ -1204,4 +1209,34 @@ export const getShareDataFn = createServerFn().handler(async (input: { data: { t
   let prices: Record<string, number> = {};
   if (ids.length) { try { const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`); const d = await r.json() as Record<string,{usd?:number}>; prices = Object.fromEntries(ids.map((id) => [id, d[id]?.usd ?? 0])); } catch { /* prices are optional */ } }
   return { ownerEmail: share.email, expiresAt: share.expires_at, label: share.label, holdings, transactions, lots, pnl, health, prices };
+});
+
+
+export const purchaseCleanupFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session"); const user = token ? validateSession(token) : null;
+  if (!user) throw new Error("Not authenticated"); if (user.is_max !== 1) throw new Error("Historical Cleanup is a Max feature.");
+  setUserCleanup(user.id, true); return { success: true };
+});
+export const getCleanupStatusFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session"); const user = token ? validateSession(token) : null;
+  if (!user) throw new Error("Not authenticated"); if (user.is_max !== 1) throw new Error("Historical Cleanup is a Max feature.");
+  return { hasCleanup: isUserCleanup(user.id) };
+});
+export const getReconciliationSummaryFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session"); const user = token ? validateSession(token) : null;
+  if (!user) throw new Error("Not authenticated"); if (user.is_max !== 1 || !isUserCleanup(user.id)) throw new Error("Purchase a cleanup pass first.");
+  return getCleanupSummary(user.id);
+});
+export const cleanupMultiImportFn = createServerFn({ method: "POST" }).handler(async (input: { data: { files: { filename: string; csvText: string }[] } }) => {
+  const token = getCookie("coinsight_session"); const user = token ? validateSession(token) : null;
+  if (!user) throw new Error("Not authenticated"); if (user.is_max !== 1 || !isUserCleanup(user.id)) throw new Error("Purchase a cleanup pass first.");
+  if (!Array.isArray(input.data.files) || input.data.files.length > 20) throw new Error("Upload up to 20 CSV files.");
+  let inserted=0, skipped=0; const symbols = new Set<string>();
+  for (const file of input.data.files) { const parsed=parseCSV(file.csvText); const normalized=parsed.transactions.map(tx=>({ ...tx, symbol:tx.symbol.toUpperCase(), coin_id:SYMBOL_MAP[tx.symbol.toUpperCase()]?.id ?? tx.symbol.toLowerCase() })); const result=dbAddTransactionsBatch(user.id, normalized); inserted+=result.inserted; skipped+=result.skipped; normalized.forEach(tx=>symbols.add(tx.symbol)); recordCleanupUpload(user.id,file.filename); }
+  const duplicatesRemoved=deduplicateTransactions(user.id); for (const symbol of symbols) recomputeFIFOForSymbol(user.id,symbol);
+  return { inserted, skipped, duplicatesRemoved, summary:getCleanupSummary(user.id) };
+});
+export const exportCleanedLedgerFn = createServerFn().handler(async () => {
+  const token=getCookie("coinsight_session"); const user=token ? validateSession(token) : null; if (!user) throw new Error("Not authenticated"); if (user.is_max!==1 || !isUserCleanup(user.id)) throw new Error("Purchase a cleanup pass first.");
+  const rows=dbGetTransactions(user.id); return ["Date,Type,Asset,Amount,Cost Basis,Proceeds,Gains/Losses,Exchange", ...rows.map(t=>[t.tx_date,t.type,t.symbol,t.amount,t.amount_usd,t.amount_usd,t.realized_pnl ?? "",t.exchange_source].map(csvCell).join(","))].join("\n");
 });

@@ -30,6 +30,9 @@ let userColumns =
 if (!userColumns.some((c) => c.name === "is_max")) {
   db.run("ALTER TABLE users ADD COLUMN is_max INTEGER DEFAULT 0");
 }
+if (!userColumns.some((c) => c.name === "has_cleanup")) {
+  db.run("ALTER TABLE users ADD COLUMN has_cleanup INTEGER DEFAULT 0");
+}
 db.run(`
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -206,6 +209,13 @@ if (!txColumns.some((c) => c.name === "realized_pnl")) {
 }
 
 // Lots table — FIFO cost-basis lots created on buys, consumed on sells
+db.run(`
+  CREATE TABLE IF NOT EXISTS cleanup_uploads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, filename TEXT NOT NULL, uploaded_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`);
+
 db.run(`
   CREATE TABLE IF NOT EXISTS lots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -764,6 +774,38 @@ export function isUserMax(userId: number): boolean {
     .prepare("SELECT is_max FROM users WHERE id = ?")
     .get(userId) as { is_max: number } | undefined;
   return row?.is_max === 1;
+}
+
+export function setUserCleanup(userId: number, value: boolean): void {
+  db.prepare("UPDATE users SET has_cleanup = ? WHERE id = ?").run(value ? 1 : 0, userId);
+}
+export function isUserCleanup(userId: number): boolean {
+  const row = db.prepare("SELECT has_cleanup FROM users WHERE id = ?").get(userId) as { has_cleanup: number } | undefined;
+  return row?.has_cleanup === 1;
+}
+export function recordCleanupUpload(userId: number, filename: string): void {
+  db.prepare("INSERT INTO cleanup_uploads (user_id, filename) VALUES (?, ?)").run(userId, filename.slice(0, 255));
+}
+export function deduplicateTransactions(userId: number): number {
+  const rows = db.prepare("SELECT * FROM transactions WHERE user_id = ? ORDER BY id ASC").all(userId) as Transaction[];
+  const kept = new Map<string, Transaction>(); const remove: number[] = [];
+  const completeness = (t: Transaction) => [t.tx_hash, t.notes, t.amount_usd, t.price_per_unit, t.fee].filter((v) => v !== "" && v !== 0 && v != null).length;
+  for (const tx of rows) {
+    const key = tx.tx_hash ? `hash:${tx.tx_hash}:${tx.symbol}:${tx.type}:${tx.amount}` : `data:${tx.symbol}:${tx.type}:${tx.amount}:${tx.tx_date.slice(0, 10)}`;
+    const prior = kept.get(key);
+    if (!prior) { kept.set(key, tx); continue; }
+    if (completeness(tx) > completeness(prior)) { remove.push(prior.id); kept.set(key, tx); } else remove.push(tx.id);
+  }
+  if (remove.length) db.prepare(`DELETE FROM transactions WHERE user_id = ? AND id IN (${remove.map(() => "?").join(",")})`).run(userId, ...remove);
+  return remove.length;
+}
+export function getCleanupSummary(userId: number) {
+  const totalTransactions = (db.prepare("SELECT COUNT(*) n FROM transactions WHERE user_id=?").get(userId) as any).n;
+  const totalFilesUploaded = (db.prepare("SELECT COUNT(*) n FROM cleanup_uploads WHERE user_id=?").get(userId) as any).n;
+  const unmatchedSells = (db.prepare("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND lower(type)='sell' AND COALESCE(realized_pnl,0)=amount_usd").get(userId) as any).n;
+  const holdingsTracked = (db.prepare("SELECT COUNT(DISTINCT symbol) n FROM transactions WHERE user_id=?").get(userId) as any).n;
+  const holdingsWithCostBasis = (db.prepare("SELECT COUNT(DISTINCT symbol) n FROM lots WHERE user_id=? AND cost_basis > 0").get(userId) as any).n;
+  return { totalTransactions, totalFilesUploaded, duplicatesRemoved: 0, unmatchedSells, holdingsTracked, holdingsWithCostBasis };
 }
 
 /* ------------------------------------------------------------------ */
