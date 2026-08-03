@@ -49,6 +49,7 @@ import TransactionLedger from "~/components/TransactionLedger";
 import QuickToolsPanel from "~/components/QuickToolsPanel";
 import PositionHistoryDrawer, { type PositionAudit } from "~/components/PositionHistoryDrawer";
 import DataHealthCard, { type DataHealth } from "~/components/DataHealthCard";
+import HistoricalCleanupCard from "~/components/HistoricalCleanupCard";
 /* ------------------------------------------------------------------ */
 /*  Audit helpers (module scope)                                        */
 /* ------------------------------------------------------------------ */
@@ -2160,6 +2161,7 @@ function App() {
         </div>
 
         {isMax && dataHealth && <DataHealthCard data={dataHealth} />}
+        {isMax && <HistoricalCleanupCard />}
 
         {/* Shared Access (Max only) — accountant share links */}
 
