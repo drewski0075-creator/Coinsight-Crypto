@@ -36,8 +36,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     q: "Do I need to give you my private keys or seed phrase?",
     a: (
       <>
-        No, never. We only use public wallet addresses to look up on-chain balances. Private keys and seed
-        phrases should never be shared with anyone — including us. If any service ever asks you for your
+        No, never. We only use public wallet addresses to look up on-chain balances. <strong>Private keys and seed
+        phrases should never be shared with anyone — including us.</strong> If any service ever asks you for your
         private keys or recovery phrase, that is a major red flag. CoinSight will never ask, because we
         simply don&apos;t need them to do our job.
       </>
