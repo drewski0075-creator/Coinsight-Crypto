@@ -47,6 +47,10 @@ import {
   validateResetToken,
   consumeResetToken,
   resetUserPassword,
+  getShareToken,
+  createShareToken,
+  revokeShareToken,
+  listShareTokens,
 } from "~/db.server";
 import { SYMBOL_MAP } from "~/constants";
 import { getCached, setCache } from "~/lib/wallet-cache";
@@ -1164,4 +1168,40 @@ export const getDataHealthFn = createServerFn().handler(async () => {
   const user = validateSession(token);
   if (!user || !isUserMax(user.id)) throw new Error("Max subscription required");
   return getDataHealth(user.id);
+});
+
+
+/** Secure, token-only read-only accountant sharing (Max). */
+export const createShareLinkFn = createServerFn().handler(async (input: { data: { expiresInDays: number; label?: string } }) => {
+  const session = getCookie("coinsight_session"); const user = session ? validateSession(session) : null;
+  if (!user || !isUserMax(user.id)) throw new Error("Max subscription required");
+  const days = Math.max(1, Math.min(365, Number(input.data.expiresInDays) || 30));
+  const expires = new Date(Date.now() + days * 86400000).toISOString().replace('T',' ').replace(/\.\d{3}Z$/, '');
+  const token = createShareToken(user.id, expires, input.data.label || "");
+  return { token, url: `https://www.coinsight-crypto.com/share/${token}` };
+});
+export const revokeShareLinkFn = createServerFn().handler(async (input: { data: { token: string } }) => {
+  const session = getCookie("coinsight_session"); const user = session ? validateSession(session) : null;
+  if (!user || !isUserMax(user.id)) throw new Error("Max subscription required");
+  const owned = listShareTokens(user.id).some((x) => x.token === input.data.token);
+  if (!owned) throw new Error("Share link not found");
+  revokeShareToken(input.data.token); return { success: true };
+});
+export const listShareLinksFn = createServerFn().handler(async () => {
+  const session = getCookie("coinsight_session"); const user = session ? validateSession(session) : null;
+  if (!user || !isUserMax(user.id)) throw new Error("Max subscription required");
+  return listShareTokens(user.id);
+});
+export const getShareDataFn = createServerFn().handler(async (input: { data: { token: string } }) => {
+  const share = getShareToken(input.data.token);
+  if (!share) return { error: "This link has expired or been revoked." } as const;
+  const holdings = getUserHoldings(share.user_id);
+  const transactions = dbGetTransactions(share.user_id);
+  const lots = getLots(share.user_id);
+  const pnl = getPortfolioPnL(share.user_id);
+  const health = getDataHealth(share.user_id);
+  const ids = [...new Set(holdings.map((h) => h.coin_id).filter(Boolean))];
+  let prices: Record<string, number> = {};
+  if (ids.length) { try { const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`); const d = await r.json() as Record<string,{usd?:number}>; prices = Object.fromEntries(ids.map((id) => [id, d[id]?.usd ?? 0])); } catch { /* prices are optional */ } }
+  return { ownerEmail: share.email, expiresAt: share.expires_at, label: share.label, holdings, transactions, lots, pnl, health, prices };
 });

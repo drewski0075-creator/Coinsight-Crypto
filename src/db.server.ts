@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 
 /* ------------------------------------------------------------------ */
 /*  SQLite database setup (using Bun's built-in sqlite)                */
@@ -227,6 +228,32 @@ try {
 } catch { /* index may already exist */ }
 
 // Password reset tokens table
+db.run(`
+  CREATE TABLE IF NOT EXISTS share_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    label TEXT DEFAULT '',
+    expires_at TEXT,
+    revoked INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`);
+
+export interface ShareToken { id: number; user_id: number; token: string; label: string; expires_at: string | null; revoked: number; created_at: string; }
+export function createShareToken(userId: number, expiresAt: string | null, label = ''): string {
+  const token = crypto.randomUUID();
+  db.prepare('INSERT INTO share_tokens (user_id, token, label, expires_at) VALUES (?, ?, ?, ?)').run(userId, token, label.slice(0, 120), expiresAt);
+  return token;
+}
+export function getShareToken(token: string): (ShareToken & { email: string }) | null {
+  const row = db.prepare(`SELECT st.*, u.email FROM share_tokens st JOIN users u ON u.id=st.user_id WHERE st.token=? AND st.revoked=0 AND (st.expires_at IS NULL OR st.expires_at > datetime('now'))`).get(token) as (ShareToken & { email: string }) | undefined;
+  return row ?? null;
+}
+export function revokeShareToken(token: string): boolean { return db.prepare('UPDATE share_tokens SET revoked=1 WHERE token=?').run(token).changes > 0; }
+export function listShareTokens(userId: number): ShareToken[] { return db.prepare('SELECT * FROM share_tokens WHERE user_id=? AND revoked=0 ORDER BY created_at DESC').all(userId) as ShareToken[]; }
+
 db.run(`
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
