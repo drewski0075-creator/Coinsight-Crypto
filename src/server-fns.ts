@@ -886,8 +886,56 @@ export const getTransactionsFn = createServerFn().handler(async () => {
   if (!token) throw new Error("Not authenticated");
   const user = validateSession(token);
   if (!user) throw new Error("Not authenticated");
-
   return dbGetTransactions(user.id);
+});
+
+/* ------------------------------------------------------------------ */
+/*  Tax reports (Pro only)                                             */
+/* ------------------------------------------------------------------ */
+type TaxRow = { date: string; type: string; asset: string; amount: number; costBasis: number; proceeds: number; gainLoss: number };
+function getTaxRows(userId: number): TaxRow[] {
+  const transactions = dbGetTransactions(userId);
+  const lots = new Map<string, { amount: number; cost: number }>();
+  return [...transactions].sort((a, b) => a.tx_date.localeCompare(b.tx_date)).map((tx) => {
+    const type = ["buy", "sell", "transfer"].includes(tx.type.toLowerCase()) ? tx.type.toLowerCase() : "transfer";
+    const value = Number(tx.amount_usd) || (Number(tx.amount) * Number(tx.price_per_unit)) || 0;
+    const lot = lots.get(tx.symbol.toUpperCase()) || { amount: 0, cost: 0 };
+    let costBasis = 0; let proceeds = 0; let gainLoss = 0;
+    if (type === "buy") { costBasis = value; lot.amount += tx.amount; lot.cost += value; }
+    else if (type === "sell") {
+      proceeds = value;
+      const avg = lot.amount > 0 ? lot.cost / lot.amount : 0;
+      costBasis = Math.min(lot.cost, avg * tx.amount);
+      gainLoss = proceeds - costBasis;
+      lot.amount = Math.max(0, lot.amount - tx.amount); lot.cost = Math.max(0, lot.cost - costBasis);
+    }
+    lots.set(tx.symbol.toUpperCase(), lot);
+    return { date: tx.tx_date, type, asset: tx.symbol.toUpperCase(), amount: tx.amount, costBasis, proceeds, gainLoss };
+  });
+}
+const csvCell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+export const exportTaxCsvFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session");
+  const user = token ? validateSession(token) : null;
+  if (!user) throw new Error("Not authenticated");
+  if (user.is_pro !== 1) throw new Error("Tax reports are a Pro feature.");
+  const rows = getTaxRows(user.id);
+  return ["Date,Type,Asset,Amount,Cost Basis,Proceeds,Gains/Losses", ...rows.map((r) => [r.date, r.type, r.asset, r.amount, r.costBasis.toFixed(2), r.proceeds.toFixed(2), r.gainLoss.toFixed(2)].map(csvCell).join(","))].join("\n");
+});
+export const exportTaxPdfFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session");
+  const user = token ? validateSession(token) : null;
+  if (!user) throw new Error("Not authenticated");
+  if (user.is_pro !== 1) throw new Error("Tax reports are a Pro feature.");
+  const rows = getTaxRows(user.id);
+  const assets = new Map<string, { buys: number; sells: number; gain: number }>();
+  for (const r of rows) { const a = assets.get(r.asset) || { buys: 0, sells: 0, gain: 0 }; if (r.type === "buy") a.buys += r.amount; if (r.type === "sell") a.sells += r.amount; a.gain += r.gainLoss; assets.set(r.asset, a); }
+  const totalBuys = rows.filter((r) => r.type === "buy").reduce((n, r) => n + r.costBasis, 0);
+  const totalSells = rows.filter((r) => r.type === "sell").reduce((n, r) => n + r.proceeds, 0);
+  const net = rows.reduce((n, r) => n + r.gainLoss, 0);
+  const dates = rows.map((r) => r.date).sort();
+  const text = `COINSIGHT TAX SUMMARY\n\nTaxpayer: ${user.email}\nDate range: ${dates[0] || "No transactions"} to ${dates[dates.length - 1] || "No transactions"}\nGenerated: ${new Date().toISOString().slice(0, 10)}\n\nTotal buys: ${totalBuys.toFixed(2)}\nTotal sells: ${totalSells.toFixed(2)}\nNet gain/loss: ${net.toFixed(2)}\n\nASSET SUMMARY\nAsset          Buys          Sells          Gain/Loss\n${[...assets].map(([asset, a]) => `${asset.padEnd(15)} ${a.buys.toFixed(6).padStart(12)} ${a.sells.toFixed(6).padStart(12)} ${a.gain.toFixed(2).padStart(10)}`).join("\n")}\n\nTax-ready export. Consult a tax professional for filing advice.`;
+  return Buffer.from(text, "utf8").toString("base64");
 });
 
 /* ------------------------------------------------------------------ */

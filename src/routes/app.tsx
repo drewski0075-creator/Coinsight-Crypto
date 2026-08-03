@@ -1658,6 +1658,9 @@ function App() {
           </div>
           <nav className="flex items-center gap-6">
             <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Dashboard</span>
+            <Link to="/reports" className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">
+              Reports {!isPro && <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">PRO</span>}
+            </Link>
             <Link
               to="/"
               className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
