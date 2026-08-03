@@ -35,6 +35,7 @@ import {
   syncExchangeHoldingsFn,
   importCSVFn,
   getTransactionsFn,
+  getPositionAuditFn,
   sendAlertEmailFn,
 } from "~/server-fns";
 import {
@@ -45,6 +46,115 @@ import PortfolioAllocationChart from "~/components/PortfolioAllocationChart";
 import CsvImportSection from "~/components/CsvImportSection";
 import TransactionLedger from "~/components/TransactionLedger";
 import QuickToolsPanel from "~/components/QuickToolsPanel";
+import PositionHistoryDrawer, { type PositionAudit } from "~/components/PositionHistoryDrawer";
+/* ------------------------------------------------------------------ */
+/*  Audit helpers (module scope)                                        */
+/* ------------------------------------------------------------------ */
+const fmtUsdAudit = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const fmtCompactAudit = (n: number) => {
+  if (n >= 1_000_000) return "$" + (n / 1_000_000).toFixed(2) + "M";
+  if (n >= 1_000) return "$" + (n / 1_000).toFixed(1) + "K";
+  return fmtUsdAudit(n);
+};
+const fmtPriceAudit = (n: number) => fmtUsdAudit(n);
+const fmtCryptoAudit = (n: number) => {
+  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  return n.toFixed(6);
+};
+const LOT_SOURCE_LABELS: Record<string, string> = {
+  coinbase: "Coinbase",
+  binance: "Binance",
+  kraken: "Kraken",
+  robinhood: "Robinhood",
+  manual: "Manual",
+};
+
+/* -- Expanded holding row: FIFO lots for one holding (Max only) -------- */
+const HoldingLotsPanel = React.memo(function HoldingLotsPanel({
+  symbol,
+  audit,
+  onOpenHistory,
+}: {
+  symbol: string;
+  audit: PositionAudit | undefined;
+  onOpenHistory: () => void;
+}) {
+  return (
+    <div className="min-w-[860px]">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+          🧾 FIFO Lots — {symbol}
+        </p>
+        <button
+          onClick={onOpenHistory}
+          className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
+        >
+          View full history →
+        </button>
+      </div>
+      {!audit ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">Loading lots...</p>
+      ) : audit.lots.length === 0 ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          No buy lots for {symbol}. Import transaction history to build your FIFO lot ledger.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left dark:border-slate-600 dark:bg-slate-700/50">
+                <th className="px-2 py-1.5 font-medium text-slate-500 dark:text-slate-400">Purchase Date</th>
+                <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Original</th>
+                <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Remaining</th>
+                <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Cost Basis</th>
+                <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Per-Unit</th>
+                <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Price @ Purchase</th>
+                <th className="px-2 py-1.5 font-medium text-slate-500 dark:text-slate-400">Source</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              {audit.lots.map((lot, i) => (
+                <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <td className="whitespace-nowrap px-2 py-1 text-slate-500 dark:text-slate-400">
+                    {lot.purchaseDate ? String(lot.purchaseDate).slice(0, 10) : "—"}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                    {fmtCryptoAudit(lot.originalAmount)}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                    {lot.remainingAmount > 0 ? (
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{fmtCryptoAudit(lot.remainingAmount)}</span>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500">0</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                    <span className="text-slate-500 dark:text-slate-400">{fmtCompactAudit(lot.originalCostBasis)}</span>
+                    {lot.remainingAmount < lot.originalAmount - 1e-9 && (
+                      <span className="ml-1 text-[10px] text-slate-400 dark:text-slate-500">→ {fmtCompactAudit(lot.remainingCostBasis)}</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono text-slate-500 dark:text-slate-400">
+                    {lot.originalCostBasis > 0 && lot.originalAmount > 0 ? fmtPriceAudit(lot.originalCostBasis / lot.originalAmount) : "—"}
+                  </td>
+                  <td className="px-2 py-1 text-right font-mono text-slate-500 dark:text-slate-400">
+                    {lot.purchasePrice ? fmtPriceAudit(lot.purchasePrice) : "—"}
+                  </td>
+                  <td className="px-2 py-1 text-slate-500 dark:text-slate-400">
+                    {(LOT_SOURCE_LABELS[lot.source] ?? lot.source) || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+});
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
@@ -763,6 +873,11 @@ function App() {
   const [isMax, setIsMax] = useState(false);
   const [lotsData, setLotsData] = useState<{ symbols: string[]; lots: Record<string, Lot[]>; totalLots: number } | null>(null);
   const [realizedPnL, setRealizedPnL] = useState<{ perSymbol: RealizedPnLRow[]; totals: { proceeds: number; costBasis: number; realizedPnl: number } } | null>(null);
+  /* -- Audit history state (Max only) ---------------------------------- */
+  const [expandedHoldings, setExpandedHoldings] = useState<Set<number>>(new Set());
+  const [historySymbol, setHistorySymbol] = useState<string | null>(null);
+  const [auditCache, setAuditCache] = useState<Record<string, PositionAudit>>({});
+  const [ledgerPreset, setLedgerPreset] = useState<{ nonce: number; label: string; asset?: string; types?: string[] } | null>(null);
 
   /* -- Portfolio state ---------------------------------------------- */
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
@@ -1108,6 +1223,47 @@ function App() {
       setRealizedPnL(null);
     }
   }, [isMax, loadMaxData]);
+
+  /* -- Audit data fetch + handlers (Max only) ------------------------- */
+  const auditCacheRef = useRef<Record<string, PositionAudit>>({});
+  const fetchAudit = useCallback(async (sym: string) => {
+    const s = sym.toUpperCase();
+    if (auditCacheRef.current[s]) return auditCacheRef.current[s];
+    try {
+      const audit = await getPositionAuditFn({ data: { symbol: s } });
+      auditCacheRef.current[s] = audit;
+      setAuditCache({ ...auditCacheRef.current });
+      return audit;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const toggleExpandHolding = useCallback((holdingId: number, sym: string) => {
+    setExpandedHoldings((prev) => {
+      const next = new Set(prev);
+      if (next.has(holdingId)) {
+        next.delete(holdingId);
+      } else {
+        next.add(holdingId);
+        fetchAudit(sym);
+      }
+      return next;
+    });
+  }, [fetchAudit]);
+
+  const openHistory = useCallback((sym: string) => {
+    const s = sym.toUpperCase();
+    setHistorySymbol(s);
+    fetchAudit(s);
+  }, [fetchAudit]);
+
+  const traceThisNumber = useCallback((label: string, asset?: string, types?: string[]) => {
+    setLedgerPreset({ nonce: Date.now(), label, asset, types });
+    setTimeout(() => {
+      document.getElementById("transaction-ledger")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }, []);
 
   const handleDeleteTransaction = useCallback(async (txId: number) => {
     try {
@@ -1918,6 +2074,21 @@ function App() {
               <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
                 {sourceBreakdown.wallet.count + sourceBreakdown.exchange.count + sourceBreakdown.manual.count} sources tracked
               </p>
+              {isMax ? (
+                <button
+                  onClick={() => traceThisNumber("Total Wealth")}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  See breakdown →
+                </button>
+              ) : isPro ? (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
+                >
+                  See breakdown <span className="rounded bg-gradient-to-r from-amber-500 to-purple-600 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">Max</span>
+                </button>
+              ) : null}
             </div>
           </div>
           
@@ -1959,6 +2130,21 @@ function App() {
                   </div>
                 )}
               </div>
+              {isMax ? (
+                <button
+                  onClick={() => traceThisNumber("Portfolio P&L", "", ["buy", "sell"])}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  See breakdown →
+                </button>
+              ) : isPro ? (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
+                >
+                  See breakdown <span className="rounded bg-gradient-to-r from-amber-500 to-purple-600 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">Max</span>
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -2161,7 +2347,7 @@ function App() {
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
             <div className="overflow-x-auto">
             {/* Table header */}
-            <div className="flex min-w-[760px] items-center border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-700">
+            <div className="flex min-w-[860px] items-center border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-700">
               <span className="sticky left-0 z-10 min-w-[100px] flex-1 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-700 dark:text-slate-400" style={{margin: '-0.75rem 0', paddingLeft: '1rem', paddingRight: '1rem'}}>
                 Coin
               </span>
@@ -2198,6 +2384,8 @@ function App() {
               ) : (
                 <span className="w-12" />
               )}
+              <span className="w-14 text-right" />
+              <span className="w-8" />
             </div>
 
             {/* Table rows */}
@@ -2209,11 +2397,12 @@ function App() {
               const costBasis = h.cost_basis || 0;
               const pnlVal = currentValue != null && costBasis > 0 ? currentValue - costBasis : null;
               const pnlPct = pnlVal != null && costBasis > 0 ? (pnlVal / costBasis) * 100 : null;
+              const isExpanded = expandedHoldings.has(h.id);
 
               return (
+                <React.Fragment key={h.id}>
                 <div
-                  key={h.id}
-                  className="flex min-w-[760px] items-center border-b border-slate-100 px-4 py-3 transition-colors duration-100 last:border-b-0 hover:bg-blue-50 dark:border-slate-700 dark:hover:bg-blue-900/20"
+                  className="flex min-w-[860px] items-center border-b border-slate-100 px-4 py-3 transition-colors duration-100 last:border-b-0 hover:bg-blue-50 dark:border-slate-700 dark:hover:bg-blue-900/20"
                 >
                   <span className="sticky left-0 z-10 min-w-[100px] flex-1 bg-white px-4 py-3 text-sm font-medium text-slate-900 dark:bg-slate-800 dark:text-slate-100" style={{margin: '-0.75rem 0', paddingLeft: '1rem', paddingRight: '1rem'}}>
                     {info?.name ?? sym}
@@ -2283,6 +2472,40 @@ function App() {
                       <span className="text-slate-400 dark:text-slate-500">—</span>
                     )}
                   </span>
+                  {isMax ? (
+                    <span className="flex w-14 justify-end">
+                      <button
+                        onClick={() => openHistory(sym)}
+                        aria-label={`View history for ${sym}`}
+                        className="text-[11px] font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                      >
+                        History
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="w-14" />
+                  )}
+                  <span className="flex w-8 justify-center">
+                    {isMax ? (
+                      <button
+                        onClick={() => toggleExpandHolding(h.id, sym)}
+                        aria-label={isExpanded ? `Collapse ${sym} details` : `Expand ${sym} details`}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-transform hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                        style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+                      >
+                        ▼
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowUpgradeModal(true)}
+                        aria-label={`Upgrade to Max for ${sym} audit history`}
+                        title="Audit history is a CoinSight Max feature"
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-100 dark:text-slate-600 dark:hover:bg-slate-700"
+                      >
+                        🔒
+                      </button>
+                    )}
+                  </span>
                   <span className="flex w-12 justify-center">
                     <button
                       onClick={() => removeHolding(h.id)}
@@ -2293,6 +2516,12 @@ function App() {
                     </button>
                   </span>
                 </div>
+                {isMax && isExpanded && (
+                  <div className="min-w-[860px] border-b border-slate-100 bg-slate-50/70 px-4 py-4 dark:border-slate-700 dark:bg-slate-800/60">
+                    <HoldingLotsPanel symbol={sym} audit={auditCache[sym]} onOpenHistory={() => openHistory(sym)} />
+                  </div>
+                )}
+                </React.Fragment>
               );
             })}
             </div>
@@ -2303,12 +2532,15 @@ function App() {
 
         {/* Transaction Ledger (Pro only) */}
         {isPro && (
-          <TransactionLedger
-            transactions={transactions}
-            loading={txLoading}
-            onDelete={handleDeleteTransaction}
-            isMax={isMax}
-          />
+          <div id="transaction-ledger" className="scroll-mt-20">
+            <TransactionLedger
+              transactions={transactions}
+              loading={txLoading}
+              onDelete={handleDeleteTransaction}
+              isMax={isMax}
+              preset={ledgerPreset}
+            />
+          </div>
         )}
 
         {/* FIFO Lots (Max only) */}
@@ -2788,6 +3020,9 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Position History Drawer (Max only) — slide-out audit panel */}
+      <PositionHistoryDrawer symbol={historySymbol} onClose={() => setHistorySymbol(null)} />
     </div>
   );
 }

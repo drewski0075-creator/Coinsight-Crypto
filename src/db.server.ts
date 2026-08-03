@@ -534,6 +534,142 @@ export function getRealizedPnLSummary(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Position audit (CoinSight Max)                                      */
+/* ------------------------------------------------------------------ */
+export interface AuditConsumedLot {
+  lotDate: string | null;
+  amount: number;
+  costBasis: number;
+}
+
+export interface AuditTraceRow {
+  tx: Transaction;
+  runningBalance: number;
+  consumedLots: AuditConsumedLot[];
+}
+
+export interface AuditLot {
+  purchaseDate: string | null;
+  originalAmount: number;
+  remainingAmount: number;
+  originalCostBasis: number;
+  remainingCostBasis: number;
+  purchasePrice: number | null;
+  source: string;
+}
+
+export interface AuditLotEvent {
+  date: string;
+  kind: "created" | "consumed";
+  amount: number;
+  costBasis: number;
+}
+
+export interface PositionAudit {
+  symbol: string;
+  trace: AuditTraceRow[];
+  lots: AuditLot[];
+  lotEvents: AuditLotEvent[];
+  netBalance: number;
+}
+
+/**
+ * Reconstructs the full audit trail for one asset: every transaction in
+ * chronological order with the running balance after each, the FIFO lot
+ * lifecycle (created on buys, consumed on sells), and the per-lot
+ * original/remaining amounts. Uses the same buy/sell FIFO semantics as
+ * recomputeFIFOForSymbol so the numbers always match the lots table.
+ */
+export function getPositionAudit(userId: number, symbol: string): PositionAudit | null {
+  const sym = symbol.toUpperCase();
+  const txs = db
+    .prepare(
+      "SELECT * FROM transactions WHERE user_id = ? AND symbol = ? ORDER BY tx_date ASC, id ASC",
+    )
+    .all(userId, sym) as Transaction[];
+  if (txs.length === 0) return null;
+
+  const ADDS = new Set(["buy", "receive", "staking_reward", "airdrop", "interest", "transfer"]);
+  const SUBS = new Set(["sell", "send", "fee"]);
+
+  // Open FIFO lots (oldest first). Mirrors consumeLotsFIFO but non-destructive.
+  const open: {
+    buyTxId: number;
+    date: string | null;
+    amount: number;
+    costBasis: number;
+    price: number | null;
+    source: string;
+  }[] = [];
+  const lotOrigins = new Map<
+    number,
+    { date: string | null; amount: number; costBasis: number; price: number | null; source: string }
+  >();
+  const lotEvents: AuditLotEvent[] = [];
+  const trace: AuditTraceRow[] = [];
+  let running = 0;
+
+  for (const tx of txs) {
+    const type = tx.type.toLowerCase();
+    if (ADDS.has(type)) running += tx.amount;
+    else if (SUBS.has(type)) running -= tx.amount;
+
+    const source = tx.exchange_source || "manual";
+
+    if (type === "buy") {
+      const orig = {
+        date: tx.tx_date,
+        amount: tx.amount,
+        costBasis: Number(tx.amount_usd) || 0,
+        price: tx.price_per_unit || null,
+        source,
+      };
+      open.push({ buyTxId: tx.id, ...orig });
+      lotOrigins.set(tx.id, orig);
+      lotEvents.push({ date: tx.tx_date, kind: "created", amount: tx.amount, costBasis: orig.costBasis });
+      trace.push({ tx, runningBalance: running, consumedLots: [] });
+    } else if (type === "sell") {
+      const consumedLots: AuditConsumedLot[] = [];
+      let remaining = tx.amount;
+      while (remaining > 1e-9 && open.length > 0) {
+        const lot = open[0];
+        const take = Math.min(lot.amount, remaining);
+        const takeCost = lot.costBasis * (take / lot.amount);
+        consumedLots.push({ lotDate: lot.date, amount: take, costBasis: takeCost });
+        lot.amount -= take;
+        lot.costBasis -= takeCost;
+        remaining -= take;
+        if (lot.amount <= 1e-9) open.shift();
+        lotEvents.push({ date: tx.tx_date, kind: "consumed", amount: take, costBasis: takeCost });
+      }
+      if (remaining > 1e-9) {
+        // Sold more than we ever bought — zero cost basis for the remainder
+        lotEvents.push({ date: tx.tx_date, kind: "consumed", amount: remaining, costBasis: 0 });
+      }
+      trace.push({ tx, runningBalance: running, consumedLots });
+    } else {
+      trace.push({ tx, runningBalance: running, consumedLots: [] });
+    }
+  }
+
+  // Per-lot listing: every buy that ever created a lot, with original vs remaining.
+  const lots: AuditLot[] = [...lotOrigins.entries()].map(([buyTxId, orig]) => {
+    const openLot = open.find((l) => l.buyTxId === buyTxId);
+    return {
+      purchaseDate: orig.date,
+      originalAmount: orig.amount,
+      remainingAmount: openLot?.amount ?? 0,
+      originalCostBasis: orig.costBasis,
+      remainingCostBasis: openLot?.costBasis ?? 0,
+      purchasePrice: orig.price,
+      source: orig.source,
+    };
+  });
+
+  return { symbol: sym, trace, lots, lotEvents, netBalance: running };
+}
+
+/* ------------------------------------------------------------------ */
 /*  User helpers                                                       */
 /* ------------------------------------------------------------------ */
 export interface User {

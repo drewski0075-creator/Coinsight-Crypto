@@ -12,6 +12,7 @@ import {
   isUserMax,
   getLots,
   getRealizedPnLSummary,
+  getPositionAudit,
   createUser,
   createSession,
   getUserByEmail,
@@ -351,6 +352,26 @@ export const getRealizedPnLFn = createServerFn().handler(async () => {
   );
   return { perSymbol, totals };
 });
+
+/* ------------------------------------------------------------------ */
+/*  Max: position audit — full transaction history for one asset       */
+/*  (Max only)                                                          */
+/* ------------------------------------------------------------------ */
+export const getPositionAuditFn = createServerFn().handler(
+  async (input: { data: { symbol: string } }) => {
+    const token = getCookie("coinsight_session");
+    if (!token) throw new Error("Not authenticated");
+    const user = validateSession(token);
+    if (!user) throw new Error("Not authenticated");
+    if (user.is_max !== 1) {
+      throw new Error("Position history audit is a CoinSight Max feature. Upgrade to Max to use it.");
+    }
+
+    const audit = getPositionAudit(user.id, input.data.symbol);
+    if (!audit) throw new Error("No transactions found for this asset.");
+    return audit;
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /*  Wallet: sync holdings from wallet                                   */

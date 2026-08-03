@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type Transaction = {
   id: number;
@@ -19,11 +19,23 @@ type Transaction = {
   created_at: string;
 };
 
+/**
+ * Preset filter — applied by "Trace This Number" links from the dashboard
+ * cards. Kept as an extra AND layer so existing user filters are untouched.
+ */
+type PresetFilter = {
+  nonce: number;
+  label: string;
+  asset?: string;
+  types?: string[];
+};
+
 type Props = {
   transactions: Transaction[];
   loading: boolean;
   onDelete: (id: number) => void;
   isMax?: boolean;
+  preset?: PresetFilter | null;
 };
 
 const TYPE_BADGES: Record<string, { label: string; cls: string }> = {
@@ -47,7 +59,8 @@ const EXCHANGE_BADGES: Record<string, { label: string; cls: string }> = {
 
 const ALL_TYPES = ["", "buy", "sell", "send", "receive", "staking_reward", "airdrop", "interest", "fee", "transfer"];
 
-const ALL_EXCHANGES = ["", "coinbase", "binance", "kraken", "robinhood"];
+// "" = all, "manual" = no exchange source (manual/other/wallet entries)
+const ALL_SOURCES = ["", "coinbase", "binance", "kraken", "robinhood", "manual"];
 
 function fmtUsd(n: number): string {
   if (Math.abs(n) >= 1) {
@@ -82,11 +95,35 @@ function formatTime(iso: string): string {
   }
 }
 
-export default function TransactionLedger({ transactions, loading, onDelete, isMax = false }: Props) {
+const inputCls =
+  "h-8 rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-500";
+
+export default function TransactionLedger({ transactions, loading, onDelete, isMax = false, preset = null }: Props) {
   const [isOpen, setIsOpen] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [exchangeFilter, setExchangeFilter] = useState("");
+  const [assetFilter, setAssetFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  // Max-only column toggles (default on)
+  const [showCostBasis, setShowCostBasis] = useState(true);
+  const [showRealizedPnl, setShowRealizedPnl] = useState(true);
+  // Applied preset (from "Trace This Number" links)
+  const [presetFilter, setPresetFilter] = useState<Omit<PresetFilter, "nonce"> | null>(null);
+
+  // Apply a new preset whenever the parent bumps the nonce
+  useEffect(() => {
+    if (!preset) return;
+    const { nonce, label, asset, types } = preset;
+    if (asset !== undefined) setAssetFilter(asset);
+    setPresetFilter({ label, types });
+  }, [preset?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const assetOptions = useMemo(() => {
+    const set = new Set(transactions.map((tx) => tx.symbol.toUpperCase()));
+    return [...set].sort();
+  }, [transactions]);
 
   const filtered = useMemo(() => {
     let result = transactions;
@@ -101,11 +138,46 @@ export default function TransactionLedger({ transactions, loading, onDelete, isM
     if (typeFilter) {
       result = result.filter((tx) => tx.type === typeFilter);
     }
-    if (exchangeFilter) {
-      result = result.filter((tx) => tx.exchange_source === exchangeFilter);
+    if (assetFilter) {
+      result = result.filter((tx) => tx.symbol.toUpperCase() === assetFilter);
+    }
+    if (sourceFilter) {
+      if (sourceFilter === "manual") {
+        result = result.filter((tx) => !tx.exchange_source || tx.exchange_source === "manual" || tx.exchange_source === "wallet");
+      } else {
+        result = result.filter((tx) => tx.exchange_source === sourceFilter);
+      }
+    }
+    if (dateFrom) {
+      result = result.filter((tx) => tx.tx_date.slice(0, 10) >= dateFrom);
+    }
+    if (dateTo) {
+      result = result.filter((tx) => tx.tx_date.slice(0, 10) <= dateTo);
+    }
+    if (presetFilter?.types && presetFilter.types.length > 0) {
+      result = result.filter((tx) => presetFilter.types!.includes(tx.type.toLowerCase()));
     }
     return result;
-  }, [transactions, search, typeFilter, exchangeFilter]);
+  }, [transactions, search, typeFilter, assetFilter, sourceFilter, dateFrom, dateTo, presetFilter]);
+
+  const activeFilterCount =
+    (search.trim() ? 1 : 0) +
+    (typeFilter ? 1 : 0) +
+    (assetFilter ? 1 : 0) +
+    (sourceFilter ? 1 : 0) +
+    (dateFrom ? 1 : 0) +
+    (dateTo ? 1 : 0) +
+    (presetFilter ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setTypeFilter("");
+    setAssetFilter("");
+    setSourceFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setPresetFilter(null);
+  };
 
   const summary = useMemo(() => {
     let totalBuy = 0;
@@ -162,12 +234,12 @@ export default function TransactionLedger({ transactions, loading, onDelete, isM
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by symbol or notes..."
-              className="h-8 w-full sm:w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-xs placeholder-slate-400 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-500"
+              className="h-8 w-full sm:w-44 rounded-lg border border-slate-300 px-3 py-1.5 text-xs placeholder-slate-400 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-500"
             />
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-8 rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-500"
+              className={inputCls}
             >
               <option value="">All Types</option>
               {ALL_TYPES.slice(1).map((t) => {
@@ -176,22 +248,106 @@ export default function TransactionLedger({ transactions, loading, onDelete, isM
               })}
             </select>
             <select
-              value={exchangeFilter}
-              onChange={(e) => setExchangeFilter(e.target.value)}
-              className="h-8 rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-500"
+              value={assetFilter}
+              onChange={(e) => setAssetFilter(e.target.value)}
+              className={inputCls}
             >
-              <option value="">All Exchanges</option>
-              {ALL_EXCHANGES.slice(1).map((ex) => {
-                const badge = EXCHANGE_BADGES[ex];
-                return <option key={ex} value={ex}>{badge?.label || ex}</option>;
+              <option value="">All Assets</option>
+              {assetOptions.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">All Sources</option>
+              {ALL_SOURCES.slice(1).map((src) => {
+                const badge = EXCHANGE_BADGES[src];
+                return (
+                  <option key={src} value={src}>
+                    {src === "manual" ? "Manual / Other" : badge?.label || src}
+                  </option>
+                );
               })}
             </select>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="From date"
+              className={`${inputCls} w-36`}
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="To date"
+              className={`${inputCls} w-36`}
+            />
+            {isMax && (
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 px-2 py-1 dark:border-slate-600">
+                <label className="flex cursor-pointer items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={showCostBasis}
+                    onChange={(e) => setShowCostBasis(e.target.checked)}
+                    className="h-3 w-3 accent-blue-600"
+                  />
+                  Cost Basis
+                </label>
+                <label className="flex cursor-pointer items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={showRealizedPnl}
+                    onChange={(e) => setShowRealizedPnl(e.target.checked)}
+                    className="h-3 w-3 accent-blue-600"
+                  />
+                  Realized P&amp;L
+                </label>
+              </div>
+            )}
+            {activeFilterCount > 0 && (
+              <>
+                <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                  {activeFilterCount} active
+                </span>
+                <button
+                  onClick={clearAllFilters}
+                  className="h-8 rounded-lg border border-slate-300 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Clear all
+                </button>
+              </>
+            )}
             {filtered.length !== transactions.length && (
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 Showing {filtered.length} of {transactions.length}
               </span>
             )}
           </div>
+
+          {/* Trace preset banner */}
+          {presetFilter && (
+            <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-3 py-2 sm:px-5 dark:border-blue-900/30 dark:bg-blue-900/20">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                🔍 Tracing <strong>{presetFilter.label}</strong> — showing the transactions behind this number
+                {presetFilter.types && presetFilter.types.length > 0 && (
+                  <span className="ml-1 text-blue-500 dark:text-blue-400">
+                    (types: {presetFilter.types.map((t) => TYPE_BADGES[t]?.label ?? t).join(", ")})
+                  </span>
+                )}
+              </p>
+              <button
+                onClick={() => setPresetFilter(null)}
+                aria-label="Dismiss trace filter"
+                className="shrink-0 rounded px-1.5 text-xs text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Loading state */}
           {loading && (
@@ -237,11 +393,11 @@ export default function TransactionLedger({ transactions, loading, onDelete, isM
                       <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Symbol</th>
                       <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Amount</th>
                       <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">USD Value</th>
-                      {isMax && (
+                      {isMax && showCostBasis && (
                         <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Cost Basis</th>
                       )}
                       <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Fee</th>
-                      {isMax && (
+                      {isMax && showRealizedPnl && (
                         <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Realized P&amp;L</th>
                       )}
                       <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Exchange</th>
@@ -267,7 +423,7 @@ export default function TransactionLedger({ transactions, loading, onDelete, isM
                           <td className="px-2 sm:px-3 py-1 font-mono font-medium text-slate-900 dark:text-slate-100">{tx.symbol}</td>
                           <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtCrypto(tx.amount)}</td>
                           <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtUsd(tx.amount_usd)}</td>
-                          {isMax && (
+                          {isMax && showCostBasis && (
                             <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
                               {(() => {
                                 const cb = costBasisFor(tx);
@@ -285,7 +441,7 @@ export default function TransactionLedger({ transactions, loading, onDelete, isM
                               "—"
                             )}
                           </td>
-                          {isMax && (
+                          {isMax && showRealizedPnl && (
                             <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
                               {tx.type.toLowerCase() === "sell" && tx.realized_pnl != null ? (
                                 <span className={tx.realized_pnl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
