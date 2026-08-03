@@ -8,7 +8,36 @@
 // member's `bun run publish` runs as their own user), so publish never collides
 // with an already-running server. Every sandbox user has passwordless sudo, so
 // the takeover works across user boundaries.
-import handler from "./dist/server/server.js";
+
+// Force .env values over any inherited environment. The sandbox injects its own
+// platform-scoped vars (e.g. STRIPE_SECRET_KEY=mk_...) that would shadow the
+// owner's .env — Bun only loads .env for vars that aren't already set — so the
+// owner's keys must win here or the site would use the wrong Stripe account.
+// Runs before the handler is imported.
+{
+  const { readFileSync } = await import("node:fs");
+  try {
+    const envText = readFileSync(new URL("./.env", import.meta.url), "utf8");
+    for (const rawLine of envText.split("\n")) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq === -1) continue;
+      const key = line.slice(0, eq).trim();
+      let value = line.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  } catch {
+    // No .env — fall back to the inherited environment.
+  }
+}
+const { default: handler } = await import("./dist/server/server.js");
 
 // Pinned, NOT read from the environment. The published preview URL
 // (<label>.<PUBLIC_SITE_DOMAIN>) is reverse-proxied to 0.0.0.0:3000 inside the
@@ -28,7 +57,6 @@ const freePort =
   `if [ -z "$pids" ]; then exit 0; fi; ` +
   `kill $pids 2>/dev/null || true; sleep 0.2; ` +
   `done`;
-
 // Take over the port, re-freeing and retrying if another publish grabbed it in the
 // gap between freeing and binding (last publish wins). Bun.serve throws EADDRINUSE
 // synchronously, so without this a raced publish would die while the shell already
@@ -56,5 +84,4 @@ for (let attempt = 1; ; attempt++) {
     await Bun.sleep(200);
   }
 }
-
 console.log(`team-site serving on http://${HOST}:${String(PORT)}`);

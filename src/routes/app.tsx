@@ -50,6 +50,12 @@ import QuickToolsPanel from "~/components/QuickToolsPanel";
 import PositionHistoryDrawer, { type PositionAudit } from "~/components/PositionHistoryDrawer";
 import DataHealthCard, { type DataHealth } from "~/components/DataHealthCard";
 import HistoricalCleanupCard from "~/components/HistoricalCleanupCard";
+import {
+  PRO_MONTHLY_PRICE_ID,
+  PRO_ANNUAL_PRICE_ID,
+  MAX_MONTHLY_PRICE_ID,
+  MAX_ANNUAL_PRICE_ID,
+} from "~/lib/stripe-prices";
 /* ------------------------------------------------------------------ */
 /*  Audit helpers (module scope)                                        */
 /* ------------------------------------------------------------------ */
@@ -793,10 +799,6 @@ const PortfolioPerformanceCard = React.memo(function PortfolioPerformanceCard({
 const STORAGE_KEY = "coinsight-holdings";
 const PRO_KEY = "coinsight_pro";
 const BANNER_DISMISSED_KEY = "coinsight_banner_dismissed";
-const MONTHLY_STRIPE_URL = "https://buy.stripe.com/00w28qaCZfD33gabN038406";
-const ANNUAL_STRIPE_URL = "https://buy.stripe.com/aFa7sKdPb0I9dUOaIW38405";
-const MAX_MONTHLY_STRIPE_URL = "https://buy.stripe.com/eVqeVc4eBeyZ2c6g3g38407";
-const MAX_ANNUAL_STRIPE_URL = "https://buy.stripe.com/cNi28qh1n1Md3ga6sG38408";
 const FREE_LIMIT = 10;
 
 /*
@@ -874,6 +876,8 @@ function App() {
   /* -- Pro state (from DB — loaded in useEffect) -------------------- */
   const [isPro, setIsPro] = useState(false);
   const [isMax, setIsMax] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [lotsData, setLotsData] = useState<{ symbols: string[]; lots: Record<string, Lot[]>; totalLots: number } | null>(null);
   const [dataHealth, setDataHealth] = useState<DataHealth | null>(null);
   const [realizedPnL, setRealizedPnL] = useState<{ perSymbol: RealizedPnLRow[]; totals: { proceeds: number; costBasis: number; realizedPnl: number } } | null>(null);
@@ -1162,6 +1166,7 @@ function App() {
       }
 
       setHoldings(result.holdings);
+      setUserEmail(result.user.email);
       setIsPro(result.user.is_pro === 1);
       setIsMax(result.user.is_max === 1);
     };
@@ -1604,6 +1609,48 @@ function App() {
       loadMaxData();
     } catch {
       /* ignore */
+    }
+  };
+
+  /* -- Stripe Checkout (subscriptions / one-time) -------------------- */
+  const startCheckout = async (priceId: string) => {
+    setCheckoutError(null);
+    try {
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priceId,
+          customerEmail: userEmail,
+          successUrl: window.location.origin + "/app?checkout=success",
+          cancelUrl: window.location.origin + "/app?checkout=cancelled",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Checkout failed to start.");
+      window.location.href = data.url;
+    } catch (err: any) {
+      setCheckoutError(err?.message || "Could not start checkout. Please try again.");
+    }
+  };
+
+  /* -- Stripe Customer Portal (manage subscription) ------------------ */
+  const openBillingPortal = async () => {
+    setCheckoutError(null);
+    try {
+      const res = await fetch("/api/create-portal-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerEmail: userEmail,
+          returnUrl: window.location.origin + "/app",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Could not open the billing portal.");
+      window.location.href = data.url;
+    } catch (err: any) {
+      setCheckoutError(err?.message || "Could not open the billing portal. Please try again.");
     }
   };
 
@@ -2161,7 +2208,7 @@ function App() {
         </div>
 
         {isMax && dataHealth && <DataHealthCard data={dataHealth} />}
-        {isMax && <HistoricalCleanupCard />}
+        {isMax && <HistoricalCleanupCard userEmail={userEmail} />}
 
         {/* Shared Access (Max only) — accountant share links */}
 
@@ -2981,8 +3028,8 @@ function App() {
                     <li>✓ Ad-free, 30-second refresh, Pro badge</li>
                   </ul>
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <a href={MONTHLY_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-blue-600 px-3 py-2 text-center text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30">$7.99/mo</a>
-                    <a href={ANNUAL_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white transition-colors hover:bg-blue-700">$80/yr</a>
+                    <button onClick={() => startCheckout(PRO_MONTHLY_PRICE_ID)} className="block rounded-lg border border-blue-600 px-3 py-2 text-center text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30">$7.99/mo</button>
+                    <button onClick={() => startCheckout(PRO_ANNUAL_PRICE_ID)} className="block rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white transition-colors hover:bg-blue-700">$80/yr</button>
                   </div>
                 </div>
 
@@ -3001,8 +3048,8 @@ function App() {
                     <li>✓ Distinct Max badge</li>
                   </ul>
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <a href={MAX_MONTHLY_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-purple-600 px-3 py-2 text-center text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/30">$9.99/mo</a>
-                    <a href={MAX_ANNUAL_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-3 py-2 text-center text-xs font-semibold text-white transition-colors hover:opacity-90">$100/yr</a>
+                    <button onClick={() => startCheckout(MAX_MONTHLY_PRICE_ID)} className="block rounded-lg border border-purple-600 px-3 py-2 text-center text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/30">$9.99/mo</button>
+                    <button onClick={() => startCheckout(MAX_ANNUAL_PRICE_ID)} className="block rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-3 py-2 text-center text-xs font-semibold text-white transition-colors hover:opacity-90">$100/yr</button>
                   </div>
                 </div>
               </div>
@@ -3027,10 +3074,27 @@ function App() {
                 )}
               </div>
 
-              {/* Grandfathering note */}
+              {checkoutError && (
+                <p className="mt-4 text-center text-xs text-red-600 dark:text-red-400">
+                  {checkoutError}
+                </p>
+              )}
+
+              {(isPro || isMax) && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={openBillingPortal}
+                    className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Manage Subscription
+                  </button>
+                </div>
+              )}
+
+              {/* Billing note */}
               <p className="mt-4 text-center text-[11px] text-slate-400 dark:text-slate-500">
-                Accounts with recurring subscriptions coming soon — early Pro and Max
-                supporters will be grandfathered in.
+                Subscriptions are billed through Stripe. Upgrade, downgrade, or cancel
+                anytime — plan changes are prorated automatically.
               </p>
             </div>
           </div>

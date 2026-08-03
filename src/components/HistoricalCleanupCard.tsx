@@ -7,13 +7,13 @@ import {
   exportCleanedLedgerFn,
 } from "~/server-fns";
 import { parseCSV } from "~/lib/csv-parser";
+import { CLEANUP_PRICE_ID } from "~/lib/stripe-prices";
 
 /* ------------------------------------------------------------------ */
 /*  Historical Cleanup — one-time Max add-on                           */
 /*  Teaser + purchase for non-buyers, multi-file upload for buyers.    */
 /* ------------------------------------------------------------------ */
 
-const CLEANUP_LINK = "https://buy.stripe.com/dRm9ASbH38aBaIC9ES38409";
 const MAX_FILES = 20;
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -50,7 +50,11 @@ type Phase = "idle" | "uploading" | "dedup" | "fifo" | "complete";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export default React.memo(function HistoricalCleanupCard() {
+export default React.memo(function HistoricalCleanupCard({
+  userEmail = null,
+}: {
+  userEmail?: string | null;
+}) {
   const [isOpen, setIsOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [hasCleanup, setHasCleanup] = useState(false);
@@ -205,6 +209,30 @@ export default React.memo(function HistoricalCleanupCard() {
     }
   };
 
+  /* Start a Stripe Checkout (one-time payment) for the cleanup purchase. */
+  const handlePurchase = async () => {
+    setPurchasePending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priceId: CLEANUP_PRICE_ID,
+          customerEmail: userEmail,
+          successUrl: window.location.origin + "/app?checkout=success",
+          cancelUrl: window.location.origin + "/app?checkout=cancelled",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Checkout failed to start.");
+      window.location.href = data.url;
+    } catch (err: any) {
+      setError(err?.message || "Could not start checkout. Please try again.");
+      setPurchasePending(false);
+    }
+  };
+
   /* ------------------------------------------------ */
   /*  Loading                                         */
   /* ------------------------------------------------ */
@@ -261,10 +289,11 @@ export default React.memo(function HistoricalCleanupCard() {
                 </p>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <button
-                    onClick={() => window.open(CLEANUP_LINK, "_blank", "noopener")}
-                    className="rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                    onClick={handlePurchase}
+                    disabled={purchasePending}
+                    className="rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
-                    Purchase Cleanup — $39.99
+                    {purchasePending ? "Opening checkout…" : "Purchase Cleanup — $39.99"}
                   </button>
                   <button
                     onClick={handleAlreadyPaid}
