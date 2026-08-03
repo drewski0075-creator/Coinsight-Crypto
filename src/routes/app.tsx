@@ -8,6 +8,9 @@ import {
   removeHoldingFn,
   migrateFn,
   activateProFn,
+  activateMaxFn,
+  getLotSummaryFn,
+  getRealizedPnLFn,
   logoutFn,
   checkAuthFn,
   getAlertsFn,
@@ -123,7 +126,29 @@ type Transaction = {
   tx_hash: string;
   tx_date: string;
   notes: string;
+  realized_pnl: number | null;
   created_at: string;
+};
+
+type Lot = {
+  id: number;
+  user_id: number;
+  symbol: string;
+  coin_id: string | null;
+  amount: number;
+  cost_basis: number;
+  purchase_price: number | null;
+  purchase_date: string | null;
+  source_tx_id: number | null;
+  created_at: string;
+};
+
+type RealizedPnLRow = {
+  symbol: string;
+  soldAmount: number;
+  proceeds: number;
+  costBasis: number;
+  realizedPnl: number;
 };
 
 /* -- Sparkline SVG component ------------------------------------------ */
@@ -657,6 +682,8 @@ const PRO_KEY = "coinsight_pro";
 const BANNER_DISMISSED_KEY = "coinsight_banner_dismissed";
 const MONTHLY_STRIPE_URL = "https://buy.stripe.com/00w28qaCZfD33gabN038406";
 const ANNUAL_STRIPE_URL = "https://buy.stripe.com/aFa7sKdPb0I9dUOaIW38405";
+const MAX_MONTHLY_STRIPE_URL = "https://buy.stripe.com/eVqeVc4eBeyZ2c6g3g38407";
+const MAX_ANNUAL_STRIPE_URL = "https://buy.stripe.com/cNi28qh1n1Md3ga6sG38408";
 const FREE_LIMIT = 10;
 
 /*
@@ -733,6 +760,9 @@ function App() {
 
   /* -- Pro state (from DB — loaded in useEffect) -------------------- */
   const [isPro, setIsPro] = useState(false);
+  const [isMax, setIsMax] = useState(false);
+  const [lotsData, setLotsData] = useState<{ symbols: string[]; lots: Record<string, Lot[]>; totalLots: number } | null>(null);
+  const [realizedPnL, setRealizedPnL] = useState<{ perSymbol: RealizedPnLRow[]; totals: { proceeds: number; costBasis: number; realizedPnl: number } } | null>(null);
 
   /* -- Portfolio state ---------------------------------------------- */
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
@@ -956,6 +986,7 @@ function App() {
     if (!result.user) return;
     setHoldings(result.holdings);
     setIsPro(result.user.is_pro === 1);
+    setIsMax(result.user.is_max === 1);
     setPortfolios(result.portfolios || []);
     // Set active portfolio if not set
     const pid = portfolioId !== undefined ? portfolioId : activePortfolioId;
@@ -991,6 +1022,7 @@ function App() {
               setHoldings(reloaded.holdings);
               setPortfolios(reloaded.portfolios || []);
               setIsPro(reloaded.user?.is_pro === 1);
+              setIsMax(reloaded.user?.is_max === 1);
               return;
             }
           }
@@ -1012,6 +1044,7 @@ function App() {
 
       setHoldings(result.holdings);
       setIsPro(result.user.is_pro === 1);
+      setIsMax(result.user.is_max === 1);
     };
 
     load();
@@ -1051,18 +1084,45 @@ function App() {
     fetchTransactions();
   }, [holdings, isPro, fetchTransactions]);
 
+  /* -- Load Max-only data (FIFO lots + realized P&L) ------------------ */
+  const loadMaxData = useCallback(async () => {
+    try {
+      const lots = await getLotSummaryFn();
+      setLotsData(lots);
+    } catch {
+      /* not a Max user */
+    }
+    try {
+      const pnl = await getRealizedPnLFn();
+      setRealizedPnL(pnl);
+    } catch {
+      /* not a Max user */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isMax) {
+      loadMaxData();
+    } else {
+      setLotsData(null);
+      setRealizedPnL(null);
+    }
+  }, [isMax, loadMaxData]);
+
   const handleDeleteTransaction = useCallback(async (txId: number) => {
     try {
       await deleteTransactionFn({ data: { txId } });
       setTransactions((prev) => prev.filter((t) => t.id !== txId));
+      if (isMax) loadMaxData();
     } catch {
       // ignore
     }
-  }, []);
+  }, [isMax, loadMaxData]);
 
   const handleImportComplete = useCallback(() => {
     fetchTransactions();
-  }, [fetchTransactions]);
+    if (isMax) loadMaxData();
+  }, [fetchTransactions, isMax, loadMaxData]);
 
   /* -- Check alerts after price refresh ------------------------------ */
   const checkAlerts = useCallback(
@@ -1367,7 +1427,20 @@ function App() {
     }
   };
 
-  /* -- Load alerts (Pro only) ---------------------------------------- */
+  /* -- Activate Max --------------------------------------------------- */
+  const activateMax = async () => {
+    try {
+      await activateMaxFn();
+      setIsMax(true);
+      setIsPro(true);
+      setShowUpgradeModal(false);
+      loadMaxData();
+    } catch {
+      /* ignore */
+    }
+  };
+
+
   const loadAlerts = useCallback(async () => {
     try {
       const result = await getAlertsFn();
@@ -1650,7 +1723,12 @@ function App() {
           <div className="flex items-center gap-2">
             <img src="/logo-icon.png" alt="CoinSight" className="h-7 w-7" />
             <span className="text-lg font-bold text-slate-900 dark:text-slate-100">CoinSight</span>
-            {isPro && (
+            {isMax && (
+              <span className="ml-1 rounded-full bg-gradient-to-r from-amber-500 to-purple-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                MAX
+              </span>
+            )}
+            {isPro && !isMax && (
               <span className="ml-1 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
                 PRO
               </span>
@@ -1847,7 +1925,7 @@ function App() {
           <div className="rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-600 dark:bg-slate-800 dark:shadow-slate-900/50">
             <div className="rounded-t-xl border-t-4 border-t-blue-600" />
             <div className="p-4 sm:p-6">
-              <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Portfolio P&amp;L</p>
+              <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Portfolio Unrealized P&amp;L</p>
               {loading && portfolioHoldings.length > 0 ? (
                 <div className="mt-1 h-10 w-48 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
               ) : (
@@ -1863,13 +1941,13 @@ function App() {
                 {portfolioPnL.hasCostData ? (
                   <>
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">P&amp;L</p>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Unrealized P&amp;L</p>
                       <p className={`text-sm font-bold ${portfolioPnL.pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {portfolioPnL.pnl >= 0 ? '▲' : '▼'} {fmtCompact(Math.abs(portfolioPnL.pnl))}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Return</p>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Unrealized Return</p>
                       <p className={`text-sm font-bold ${portfolioPnL.pnlPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {portfolioPnL.pnlPct >= 0 ? '+' : ''}{portfolioPnL.pnlPct.toFixed(1)}%
                       </p>
@@ -2083,7 +2161,7 @@ function App() {
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
             <div className="overflow-x-auto">
             {/* Table header */}
-            <div className="flex min-w-[640px] items-center border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-700">
+            <div className="flex min-w-[760px] items-center border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-700">
               <span className="sticky left-0 z-10 min-w-[100px] flex-1 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-700 dark:text-slate-400" style={{margin: '-0.75rem 0', paddingLeft: '1rem', paddingRight: '1rem'}}>
                 Coin
               </span>
@@ -2100,10 +2178,13 @@ function App() {
                 Value
               </span>
               <span className="w-24 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                P&amp;L
+                Cost Basis
+              </span>
+              <span className="w-24 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Unrealized P&amp;L
               </span>
               <span className="w-20 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Return
+                Unrealized Return
               </span>
               {isPro ? (
                 <span className="w-20 text-right">
@@ -2132,7 +2213,7 @@ function App() {
               return (
                 <div
                   key={h.id}
-                  className="flex min-w-[640px] items-center border-b border-slate-100 px-4 py-3 transition-colors duration-100 last:border-b-0 hover:bg-blue-50 dark:border-slate-700 dark:hover:bg-blue-900/20"
+                  className="flex min-w-[760px] items-center border-b border-slate-100 px-4 py-3 transition-colors duration-100 last:border-b-0 hover:bg-blue-50 dark:border-slate-700 dark:hover:bg-blue-900/20"
                 >
                   <span className="sticky left-0 z-10 min-w-[100px] flex-1 bg-white px-4 py-3 text-sm font-medium text-slate-900 dark:bg-slate-800 dark:text-slate-100" style={{margin: '-0.75rem 0', paddingLeft: '1rem', paddingRight: '1rem'}}>
                     {info?.name ?? sym}
@@ -2169,6 +2250,13 @@ function App() {
                       <span className="inline-block h-4 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
                     ) : currentValue != null ? (
                       fmtCompact(currentValue)
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500">—</span>
+                    )}
+                  </span>
+                  <span className="w-24 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
+                    {costBasis > 0 ? (
+                      fmtCompact(costBasis)
                     ) : (
                       <span className="text-slate-400 dark:text-slate-500">—</span>
                     )}
@@ -2219,7 +2307,159 @@ function App() {
             transactions={transactions}
             loading={txLoading}
             onDelete={handleDeleteTransaction}
+            isMax={isMax}
           />
+        )}
+
+        {/* FIFO Lots (Max only) */}
+        {isMax ? (
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800">
+            <div className="px-5 py-3">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                🧾 FIFO Lots{" "}
+                <span className="ml-1 rounded bg-gradient-to-r from-amber-500 to-purple-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                  Max
+                </span>
+              </p>
+            </div>
+            <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-700">
+              {lotsData === null ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">Loading lots...</p>
+              ) : lotsData.totalLots === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  No lots yet. Import transaction history or add buy transactions to build your FIFO lot ledger.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-left dark:border-slate-700">
+                        <th className="px-2 py-1.5 font-medium text-slate-500 dark:text-slate-400">Symbol</th>
+                        <th className="px-2 py-1.5 font-medium text-slate-500 dark:text-slate-400">Acquired</th>
+                        <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Remaining</th>
+                        <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Cost Basis</th>
+                        <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Avg Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                      {lotsData.symbols.map((sym) =>
+                        lotsData.lots[sym].map((lot) => (
+                          <tr key={lot.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td className="px-2 py-1 font-mono font-medium text-slate-900 dark:text-slate-100">{lot.symbol}</td>
+                            <td className="px-2 py-1 whitespace-nowrap text-slate-500 dark:text-slate-400">
+                              {lot.purchase_date ? String(lot.purchase_date).slice(0, 10) : "—"}
+                            </td>
+                            <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                              {lot.amount.toLocaleString("en-US", { maximumFractionDigits: 8 })}
+                            </td>
+                            <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtCompact(lot.cost_basis)}</td>
+                            <td className="px-2 py-1 text-right font-mono text-slate-500 dark:text-slate-400">
+                              {lot.purchase_price ? fmtPrice(lot.purchase_price) : "—"}
+                            </td>
+                          </tr>
+                        )),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mb-6 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-amber-50 px-5 py-4 shadow-sm dark:border-purple-800/50 dark:from-purple-900/20 dark:to-amber-900/20">
+            <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                🧾 <strong>FIFO Lot Tracking</strong> — per-lot cost basis and remaining amounts.{" "}
+                <span className="font-semibold text-purple-600 dark:text-purple-400">CoinSight Max</span> feature.
+              </p>
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="shrink-0 rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Upgrade to Max
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Realized P&L (Max only) */}
+        {isMax ? (
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800">
+            <div className="px-5 py-3">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                📊 Realized P&amp;L{" "}
+                <span className="ml-1 rounded bg-gradient-to-r from-amber-500 to-purple-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                  Max
+                </span>
+              </p>
+            </div>
+            <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-700">
+              {realizedPnL === null ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">Loading realized P&amp;L...</p>
+              ) : realizedPnL.perSymbol.length === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  No sell transactions yet. When you sell, CoinSight matches against your FIFO lots and shows the realized gain or loss here.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-left dark:border-slate-700">
+                        <th className="px-2 py-1.5 font-medium text-slate-500 dark:text-slate-400">Symbol</th>
+                        <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Sold</th>
+                        <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Proceeds</th>
+                        <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Cost Basis</th>
+                        <th className="px-2 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Realized P&amp;L</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                      {realizedPnL.perSymbol.map((r) => (
+                        <tr key={r.symbol} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                          <td className="px-2 py-1 font-mono font-medium text-slate-900 dark:text-slate-100">{r.symbol}</td>
+                          <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                            {r.soldAmount.toLocaleString("en-US", { maximumFractionDigits: 8 })}
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtCompact(r.proceeds)}</td>
+                          <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtCompact(r.costBasis)}</td>
+                          <td className="px-2 py-1 text-right font-mono font-semibold">
+                            <span className={r.realizedPnl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                              {r.realizedPnl >= 0 ? "+" : "−"}{fmtCompact(Math.abs(r.realizedPnl))}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="border-t border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/50">
+                        <td className="px-2 py-1.5 font-semibold text-slate-700 dark:text-slate-300">Total</td>
+                        <td className="px-2 py-1.5" />
+                        <td className="px-2 py-1.5 text-right font-mono font-semibold text-slate-700 dark:text-slate-300">{fmtCompact(realizedPnL.totals.proceeds)}</td>
+                        <td className="px-2 py-1.5 text-right font-mono font-semibold text-slate-700 dark:text-slate-300">{fmtCompact(realizedPnL.totals.costBasis)}</td>
+                        <td className="px-2 py-1.5 text-right font-mono font-bold">
+                          <span className={realizedPnL.totals.realizedPnl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                            {realizedPnL.totals.realizedPnl >= 0 ? "+" : "−"}{fmtCompact(Math.abs(realizedPnL.totals.realizedPnl))}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mb-6 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-amber-50 px-5 py-4 shadow-sm dark:border-purple-800/50 dark:from-purple-900/20 dark:to-amber-900/20">
+            <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                📊 <strong>Realized P&amp;L</strong> — see actual gains and losses from your sells, matched to FIFO lots.{" "}
+                <span className="font-semibold text-purple-600 dark:text-purple-400">CoinSight Max</span> feature.
+              </p>
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="shrink-0 rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Upgrade to Max
+              </button>
+            </div>
+          </div>
         )}
 
 
@@ -2442,11 +2682,11 @@ function App() {
             if (e.target === e.currentTarget) setShowUpgradeModal(false);
           }}
         >
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-slate-800">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl dark:bg-slate-800">
             {/* Modal header */}
-            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-blue-600 to-purple-700 px-6 py-4">
               <h2 className="text-lg font-bold text-white">
-                Upgrade to CoinSight Pro
+                Choose Your Plan
               </h2>
               <button
                 onClick={() => setShowUpgradeModal(false)}
@@ -2457,72 +2697,91 @@ function App() {
               </button>
             </div>
 
-            {/* Modal body */}
+            {/* Modal body — three-tier plan picker */}
             <div className="px-6 py-5">
-              {/* Benefits list */}
-              <ul className="mb-5 space-y-3">
-                <li className="flex items-start gap-3">
-                  <span className="mt-0.5 text-blue-600 dark:text-blue-400">✓</span>
-                  <span className="text-sm text-slate-700 dark:text-slate-300">
-                    <strong>Unlimited coins</strong> — track as many
-                    cryptocurrencies as you want
-                  </span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-0.5 text-blue-600 dark:text-blue-400">✓</span>
-                  <span className="text-sm text-slate-700 dark:text-slate-300">
-                    <strong>Ad-free</strong> — clean, uninterrupted portfolio
-                    tracking
-                  </span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-0.5 text-blue-600 dark:text-blue-400">✓</span>
-                  <span className="text-sm text-slate-700 dark:text-slate-300">
-                    <strong>Pro badge</strong> — show off your Pro status in the
-                    app
-                  </span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="mt-0.5 text-blue-600 dark:text-blue-400">✓</span>
-                  <span className="text-sm text-slate-700 dark:text-slate-300">
-                    <strong>Multi-wallet address book</strong> — save public
-                    addresses from Ethereum, Solana &amp; Bitcoin and track
-                    native balances read-only
-                  </span>
-                </li>
-              </ul>
-
-              {/* Plan picker */}
-              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-600 dark:bg-slate-700">
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Monthly</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">$7.99<span className="text-sm font-normal text-slate-500 dark:text-slate-400">/month</span></p>
-                  <p className="mt-1 min-h-10 text-xs text-slate-500 dark:text-slate-400">Flexible, cancel anytime</p>
-                  <a href={MONTHLY_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="mt-3 block rounded-lg border border-blue-600 px-3 py-2 text-center text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30">Subscribe</a>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {/* Free */}
+                <div className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-600 dark:bg-slate-700">
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Free</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">$0<span className="text-sm font-normal text-slate-500 dark:text-slate-400">/forever</span></p>
+                  <ul className="mt-3 flex-1 space-y-2 text-xs text-slate-600 dark:text-slate-400">
+                    <li>✓ Track up to 10 coins</li>
+                    <li>✓ 60-second price refresh</li>
+                    <li>✓ Total wealth dashboard</li>
+                    <li>✓ Top-5 sparkline charts</li>
+                    <li>✓ Browser wallet detection</li>
+                  </ul>
+                  <p className="mt-4 rounded-lg bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500 dark:bg-slate-600 dark:text-slate-300">
+                    Current plan
+                  </p>
                 </div>
-                <div className="relative rounded-xl border-2 border-blue-500 bg-blue-50 p-4 dark:bg-blue-900/20">
-                  <span className="absolute -top-3 right-3 rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white">Best Value</span>
-                  <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">Annual</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">$80<span className="text-sm font-normal text-slate-500 dark:text-slate-400">/year</span></p>
-                  <p className="mt-1 min-h-10 text-xs text-blue-700 dark:text-blue-300">Save 17% — two months free</p>
-                  <a href={ANNUAL_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="mt-3 block rounded-lg bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-blue-700">Subscribe</a>
+
+                {/* Pro */}
+                <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-800">
+                  <p className="text-sm font-bold text-blue-600 dark:text-blue-400">CoinSight Pro</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">$7.99<span className="text-sm font-normal text-slate-500 dark:text-slate-400">/mo</span></p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">or $80/year — save 17%</p>
+                  <ul className="mt-3 flex-1 space-y-2 text-xs text-slate-600 dark:text-slate-400">
+                    <li>✓ Everything in Free</li>
+                    <li>✓ Unlimited coins</li>
+                    <li>✓ CSV import (Coinbase, Binance, Kraken, Robinhood)</li>
+                    <li>✓ Transaction ledger</li>
+                    <li>✓ Price alerts + email notifications</li>
+                    <li>✓ Multi-wallet address book</li>
+                    <li>✓ Exchange holdings tracking</li>
+                    <li>✓ Tax-ready CSV &amp; PDF exports</li>
+                    <li>✓ Ad-free, 30-second refresh, Pro badge</li>
+                  </ul>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <a href={MONTHLY_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-blue-600 px-3 py-2 text-center text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30">$7.99/mo</a>
+                    <a href={ANNUAL_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white transition-colors hover:bg-blue-700">$80/yr</a>
+                  </div>
+                </div>
+
+                {/* Max */}
+                <div className="relative flex flex-col rounded-xl border-2 border-purple-500 bg-gradient-to-b from-purple-50 to-amber-50 p-4 dark:from-purple-900/20 dark:to-amber-900/20">
+                  <span className="absolute -top-3 right-3 rounded-full bg-gradient-to-r from-amber-500 to-purple-600 px-2.5 py-1 text-[11px] font-bold text-white">Best Value</span>
+                  <p className="text-sm font-bold text-purple-700 dark:text-purple-300">CoinSight Max</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">$9.99<span className="text-sm font-normal text-slate-500 dark:text-slate-400">/mo</span></p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">or $100/year — save 17%</p>
+                  <ul className="mt-3 flex-1 space-y-2 text-xs text-slate-700 dark:text-slate-300">
+                    <li>✓ Everything in Pro</li>
+                    <li className="font-medium text-purple-700 dark:text-purple-300">✓ FIFO lot tracking — per-lot cost basis</li>
+                    <li className="font-medium text-purple-700 dark:text-purple-300">✓ Realized P&amp;L — actual gains on sells</li>
+                    <li className="font-medium text-purple-700 dark:text-purple-300">✓ Tax-ready precision — FIFO-matched exports</li>
+                    <li className="font-medium text-purple-700 dark:text-purple-300">✓ Cost basis &amp; realized P&amp;L in your ledger</li>
+                    <li>✓ Distinct Max badge</li>
+                  </ul>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <a href={MAX_MONTHLY_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-purple-600 px-3 py-2 text-center text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/30">$9.99/mo</a>
+                    <a href={MAX_ANNUAL_STRIPE_URL} target="_blank" rel="noopener noreferrer" className="block rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-3 py-2 text-center text-xs font-semibold text-white transition-colors hover:opacity-90">$100/yr</a>
+                  </div>
                 </div>
               </div>
 
               {/* Manual activation */}
-              <p className="mb-2 text-center text-xs text-slate-400 dark:text-slate-500">
-                Already paid? Click here to activate Pro.
-              </p>
-              <button
-                onClick={activatePro}
-                className="block w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-center text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
-              >
-                I've paid — activate Pro
-              </button>
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                {!isPro && (
+                  <button
+                    onClick={activatePro}
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-center text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
+                  >
+                    I've paid — activate Pro
+                  </button>
+                )}
+                {!isMax && (
+                  <button
+                    onClick={activateMax}
+                    className="rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-amber-50 px-4 py-2 text-center text-sm font-medium text-purple-700 transition-colors hover:from-purple-100 hover:to-amber-100 dark:border-purple-800/50 dark:from-purple-900/20 dark:to-amber-900/20 dark:text-purple-300"
+                  >
+                    I've paid — activate Max
+                  </button>
+                )}
+              </div>
 
               {/* Grandfathering note */}
               <p className="mt-4 text-center text-[11px] text-slate-400 dark:text-slate-500">
-                Accounts with recurring subscriptions coming soon — early Pro
+                Accounts with recurring subscriptions coming soon — early Pro and Max
                 supporters will be grandfathered in.
               </p>
             </div>

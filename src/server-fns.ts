@@ -8,6 +8,10 @@ import {
   removeHolding as dbRemoveHolding,
   getHoldingCount,
   setUserPro,
+  setUserMax,
+  isUserMax,
+  getLots,
+  getRealizedPnLSummary,
   createUser,
   createSession,
   getUserByEmail,
@@ -145,7 +149,7 @@ export const logoutFn = createServerFn().handler(async () => {
 /*  Auth: check session                                                 */
 /* ------------------------------------------------------------------ */
 export const getAuthFn = createServerFn().handler(async (): Promise<{
-  user: { id: number; email: string; is_pro: number } | null;
+  user: { id: number; email: string; is_pro: number; is_max: number } | null;
   holdings: { id: number; symbol: string; coin_id: string; coin_name: string; amount: number; source: string; portfolio_id: number | null; cost_basis: number; purchase_price: number }[];
   holdingCount: number;
   portfolios: { id: number; name: string; is_default: number }[];
@@ -172,7 +176,7 @@ export const getAuthFn = createServerFn().handler(async (): Promise<{
   const portfolios = getPortfolios(user.id);
 
   return {
-    user: { id: user.id, email: user.email, is_pro: user.is_pro },
+    user: { id: user.id, email: user.email, is_pro: user.is_pro, is_max: user.is_max },
     holdings,
     holdingCount: holdings.length,
     portfolios,
@@ -242,12 +246,13 @@ export const migrateFn = createServerFn().handler(
 /* ------------------------------------------------------------------ */
 export const checkAuthFn = createServerFn().handler(async (): Promise<{
   authenticated: boolean;
+  isMax: boolean;
 }> => {
   const token = getCookie("coinsight_session");
-  if (!token) return { authenticated: false };
+  if (!token) return { authenticated: false, isMax: false };
 
   const user = validateSession(token);
-  if (!user) return { authenticated: false };
+  if (!user) return { authenticated: false, isMax: false };
 
   // Refresh session cookie
   setCookie("coinsight_session", token, {
@@ -258,7 +263,7 @@ export const checkAuthFn = createServerFn().handler(async (): Promise<{
     maxAge: 7 * 24 * 60 * 60,
   });
 
-  return { authenticated: true };
+  return { authenticated: true, isMax: user.is_max === 1 };
 });
 
 /* ------------------------------------------------------------------ */
@@ -277,6 +282,74 @@ export const activateProFn = createServerFn().handler(async () => {
   sendEmail({ to: user.email, subject: confirm.subject, html: confirm.html }).catch(() => {});
 
   return { success: true };
+});
+
+/* ------------------------------------------------------------------ */
+/*  Max: activate (manual upgrade — Max implies Pro)                    */
+/* ------------------------------------------------------------------ */
+export const activateMaxFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session");
+  if (!token) throw new Error("Not authenticated");
+  const user = validateSession(token);
+  if (!user) throw new Error("Not authenticated");
+
+  setUserMax(user.id, true);
+
+  // Send purchase confirmation email (fire-and-forget)
+  const confirm = buildPurchaseConfirmationEmail();
+  sendEmail({ to: user.email, subject: confirm.subject, html: confirm.html }).catch(() => {});
+
+  return { success: true };
+});
+
+/* ------------------------------------------------------------------ */
+/*  Max: FIFO lot summary (Max only)                                    */
+/* ------------------------------------------------------------------ */
+export const getLotSummaryFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session");
+  if (!token) throw new Error("Not authenticated");
+  const user = validateSession(token);
+  if (!user) throw new Error("Not authenticated");
+  if (user.is_max !== 1) {
+    throw new Error("FIFO lot tracking is a CoinSight Max feature. Upgrade to Max to use it.");
+  }
+
+  const lots = getLots(user.id);
+  // Group by symbol, oldest lot first
+  const bySymbol: Record<string, typeof lots> = {};
+  for (const lot of lots) {
+    (bySymbol[lot.symbol] ??= []).push(lot);
+  }
+  return {
+    symbols: Object.keys(bySymbol).sort(),
+    lots: bySymbol,
+    totalLots: lots.length,
+  };
+});
+
+/* ------------------------------------------------------------------ */
+/*  Max: realized P&L summary (Max only)                                */
+/* ------------------------------------------------------------------ */
+export const getRealizedPnLFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session");
+  if (!token) throw new Error("Not authenticated");
+  const user = validateSession(token);
+  if (!user) throw new Error("Not authenticated");
+  if (user.is_max !== 1) {
+    throw new Error("Realized P&L is a CoinSight Max feature. Upgrade to Max to use it.");
+  }
+
+  const perSymbol = getRealizedPnLSummary(user.id);
+  const totals = perSymbol.reduce(
+    (acc, r) => {
+      acc.proceeds += r.proceeds || 0;
+      acc.costBasis += r.costBasis || 0;
+      acc.realizedPnl += r.realizedPnl || 0;
+      return acc;
+    },
+    { proceeds: 0, costBasis: 0, realizedPnl: 0 },
+  );
+  return { perSymbol, totals };
 });
 
 /* ------------------------------------------------------------------ */
@@ -895,22 +968,33 @@ export const getTransactionsFn = createServerFn().handler(async () => {
 type TaxRow = { date: string; type: string; asset: string; amount: number; costBasis: number; proceeds: number; gainLoss: number };
 function getTaxRows(userId: number): TaxRow[] {
   const transactions = dbGetTransactions(userId);
-  const lots = new Map<string, { amount: number; cost: number }>();
+  // FIFO lot queue per symbol: oldest buys consumed first
+  const lots = new Map<string, { amount: number; cost: number }[]>();
   return [...transactions].sort((a, b) => a.tx_date.localeCompare(b.tx_date)).map((tx) => {
     const type = ["buy", "sell", "transfer"].includes(tx.type.toLowerCase()) ? tx.type.toLowerCase() : "transfer";
     const value = Number(tx.amount_usd) || (Number(tx.amount) * Number(tx.price_per_unit)) || 0;
-    const lot = lots.get(tx.symbol.toUpperCase()) || { amount: 0, cost: 0 };
+    const symbol = tx.symbol.toUpperCase();
+    const symbolLots = lots.get(symbol) || [];
     let costBasis = 0; let proceeds = 0; let gainLoss = 0;
-    if (type === "buy") { costBasis = value; lot.amount += tx.amount; lot.cost += value; }
-    else if (type === "sell") {
+    if (type === "buy") {
+      costBasis = value;
+      symbolLots.push({ amount: tx.amount, cost: value });
+    } else if (type === "sell") {
       proceeds = value;
-      const avg = lot.amount > 0 ? lot.cost / lot.amount : 0;
-      costBasis = Math.min(lot.cost, avg * tx.amount);
+      let remaining = tx.amount;
+      while (remaining > 1e-9 && symbolLots.length > 0) {
+        const first = symbolLots[0];
+        const take = Math.min(first.amount, remaining);
+        costBasis += first.cost * (take / first.amount);
+        first.amount -= take;
+        remaining -= take;
+        if (first.amount <= 1e-9) symbolLots.shift();
+      }
+      // Any unmatched sell amount has zero cost basis
       gainLoss = proceeds - costBasis;
-      lot.amount = Math.max(0, lot.amount - tx.amount); lot.cost = Math.max(0, lot.cost - costBasis);
     }
-    lots.set(tx.symbol.toUpperCase(), lot);
-    return { date: tx.tx_date, type, asset: tx.symbol.toUpperCase(), amount: tx.amount, costBasis, proceeds, gainLoss };
+    lots.set(symbol, symbolLots);
+    return { date: tx.tx_date, type, asset: symbol, amount: tx.amount, costBasis, proceeds, gainLoss };
   });
 }
 const csvCell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -934,7 +1018,7 @@ export const exportTaxPdfFn = createServerFn().handler(async () => {
   const totalSells = rows.filter((r) => r.type === "sell").reduce((n, r) => n + r.proceeds, 0);
   const net = rows.reduce((n, r) => n + r.gainLoss, 0);
   const dates = rows.map((r) => r.date).sort();
-  const text = `COINSIGHT TAX SUMMARY\n\nTaxpayer: ${user.email}\nDate range: ${dates[0] || "No transactions"} to ${dates[dates.length - 1] || "No transactions"}\nGenerated: ${new Date().toISOString().slice(0, 10)}\n\nTotal buys: ${totalBuys.toFixed(2)}\nTotal sells: ${totalSells.toFixed(2)}\nNet gain/loss: ${net.toFixed(2)}\n\nASSET SUMMARY\nAsset          Buys          Sells          Gain/Loss\n${[...assets].map(([asset, a]) => `${asset.padEnd(15)} ${a.buys.toFixed(6).padStart(12)} ${a.sells.toFixed(6).padStart(12)} ${a.gain.toFixed(2).padStart(10)}`).join("\n")}\n\nTax-ready export. Consult a tax professional for filing advice.`;
+  const text = `COINSIGHT TAX SUMMARY\n\nTaxpayer: ${user.email}\nDate range: ${dates[0] || "No transactions"} to ${dates[dates.length - 1] || "No transactions"}\nGenerated: ${new Date().toISOString().slice(0, 10)}\nCalculation: FIFO (first-in, first-out) lot matching\n\nTotal buys: ${totalBuys.toFixed(2)}\nTotal sells: ${totalSells.toFixed(2)}\nNet gain/loss: ${net.toFixed(2)}\n\nASSET SUMMARY\nAsset          Buys          Sells          Gain/Loss\n${[...assets].map(([asset, a]) => `${asset.padEnd(15)} ${a.buys.toFixed(6).padStart(12)} ${a.sells.toFixed(6).padStart(12)} ${a.gain.toFixed(2).padStart(10)}`).join("\n")}\n\nTax-ready export. Consult a tax professional for filing advice.`;
   return Buffer.from(text, "utf8").toString("base64");
 });
 
