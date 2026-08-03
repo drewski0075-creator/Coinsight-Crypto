@@ -38,6 +38,9 @@ import {
   getPositionAuditFn,
   sendAlertEmailFn,
   getDataHealthFn,
+  createShareLinkFn,
+  revokeShareLinkFn,
+  listShareLinksFn,
 } from "~/server-fns";
 import {
   SYMBOL_MAP,
@@ -844,6 +847,335 @@ export const Route = createFileRoute("/app")({
   component: App,
 });
 
+/* ------------------------------------------------------------------ */
+/*  Shared Access (Max only) — accountant share links                   */
+/* ------------------------------------------------------------------ */
+type ShareLink = {
+  id: number;
+  user_id: number;
+  token: string;
+  label: string;
+  expires_at: string | null;
+  revoked: number;
+  created_at: string;
+};
+const SHARE_BASE_URL = "https://www.coinsight-crypto.com/share/";
+const fmtShareExpiryDate = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return iso;
+  }
+};
+const fmtShareExpiry = (expiresAt: string | null): string => {
+  if (!expiresAt) return "Never expires";
+  const t = new Date(expiresAt.replace(" ", "T") + "Z");
+  if (isNaN(t.getTime())) return "Expires " + expiresAt;
+  const days = Math.ceil((t.getTime() - Date.now()) / 86400000);
+  if (days <= 0) return "Expired";
+  if (days <= 30) return `Expires in ${days} day${days === 1 ? "" : "s"}`;
+  return "Expires " + fmtShareExpiryDate(t.toISOString());
+};
+const ShareLinksSection = React.memo(function ShareLinksSection() {
+  const [isOpen, setIsOpen] = useState(true);
+  const [links, setLinks] = useState<ShareLink[] | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [label, setLabel] = useState("");
+  const [expiryChoice, setExpiryChoice] = useState("30");
+  const [customDate, setCustomDate] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setLinks(await listShareLinksFn());
+    } catch {
+      setLinks([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const activeLinks = useMemo(() => {
+    if (!links) return [];
+    const now = Date.now();
+    return links.filter((l) => {
+      if (!l.expires_at) return true;
+      const t = new Date(l.expires_at.replace(" ", "T") + "Z").getTime();
+      return !isNaN(t) && t > now;
+    });
+  }, [links]);
+
+  const copyToClipboard = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(key);
+    window.setTimeout(() => setCopied((c) => (c === key ? null : c)), 2000);
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setCreateError(null);
+    try {
+      let days = Number(expiryChoice);
+      if (expiryChoice === "custom") {
+        if (!customDate) {
+          setCreateError("Choose a custom expiry date.");
+          setGenerating(false);
+          return;
+        }
+        const end = new Date(customDate + "T23:59:59").getTime();
+        days = Math.max(1, Math.ceil((end - Date.now()) / 86400000));
+      }
+      const result = await createShareLinkFn({ data: { expiresInDays: days, label: label.trim() || undefined } });
+      setCreated({ url: result.url, expiresAt: new Date(Date.now() + days * 86400000).toISOString() });
+      setLabel("");
+      setExpiryChoice("30");
+      setCustomDate("");
+      refresh();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create share link.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleRevoke = async (token: string) => {
+    try {
+      await revokeShareLinkFn({ data: { token } });
+      setLinks((prev) => (prev ? prev.filter((l) => l.token !== token) : prev));
+    } catch {
+      refresh();
+    }
+  };
+
+  return (
+    <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800">
+      {/* Header */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between px-5 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            🔗 Shared Access
+            <span className="ml-1.5 rounded bg-gradient-to-r from-amber-500 to-purple-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+              Max
+            </span>
+          </p>
+          {activeLinks.length > 0 && (
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+              {activeLinks.length}
+            </span>
+          )}
+        </div>
+        <span
+          className="ml-2 text-sm text-slate-400 transition-transform dark:text-slate-500"
+          style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+        >
+          ▼
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-700">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Share a read-only snapshot of your portfolio with your accountant. Links are token-based and expire automatically.
+          </p>
+          <button
+            onClick={() => {
+              setCreated(null);
+              setCreateError(null);
+              setShowModal(true);
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            + Create Share Link
+          </button>
+
+          {/* Active links list */}
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Active share links
+            </p>
+            {links === null ? (
+              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Loading share links...</p>
+            ) : activeLinks.length === 0 ? (
+              <p className="mt-2 rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                No active share links. Create one to share with your accountant.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {activeLinks.map((l) => (
+                  <li
+                    key={l.token}
+                    className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        {l.label || "Unnamed link"}
+                      </p>
+                      <p className="mt-0.5 font-mono text-xs text-slate-400 dark:text-slate-500">
+                        {l.token.slice(0, 8)}…
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{fmtShareExpiry(l.expires_at)}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        onClick={() => copyToClipboard(SHARE_BASE_URL + l.token, l.token)}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
+                      >
+                        {copied === l.token ? "Copied!" : "Copy"}
+                      </button>
+                      <button
+                        onClick={() => handleRevoke(l.token)}
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Create Share Link Modal ---------- */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowModal(false);
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-slate-800">
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-blue-600 to-purple-700 px-6 py-4">
+              <h2 className="text-lg font-bold text-white">Create Share Link</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                aria-label="Close"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-blue-200 transition-colors hover:bg-blue-500 hover:text-white"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {created ? (
+                <div>
+                  <p className="text-sm font-semibold text-green-600 dark:text-green-400">✓ Share link created</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <code className="min-w-0 flex-1 truncate rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
+                      {created.url}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(created.url, "created")}
+                      className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                    >
+                      {copied === "created" ? "Copied!" : "Copy Link"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Expires {fmtShareExpiryDate(created.expiresAt)}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowModal(false);
+                      setCreated(null);
+                    }}
+                    className="mt-5 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Label <span className="font-normal normal-case text-slate-400 dark:text-slate-500">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={label}
+                      onChange={(e) => setLabel(e.target.value)}
+                      placeholder="e.g. CPA tax prep 2026"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm placeholder-slate-400 transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Expires in
+                    </label>
+                    <select
+                      value={expiryChoice}
+                      onChange={(e) => setExpiryChoice(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-500"
+                    >
+                      <option value="7">7 days</option>
+                      <option value="30">30 days</option>
+                      <option value="90">90 days</option>
+                      <option value="custom">Custom date</option>
+                    </select>
+                  </div>
+                  {expiryChoice === "custom" && (
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Expiry date
+                      </label>
+                      <input
+                        type="date"
+                        value={customDate}
+                        min={new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => setCustomDate(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-500"
+                      />
+                    </div>
+                  )}
+                  {createError && (
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-900/20 dark:text-red-400">
+                      {createError}
+                    </p>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => setShowModal(false)}
+                      className="flex-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={handleGenerate}
+                      disabled={generating}
+                      className="flex-1 rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      {generating ? "Generating..." : "Generate"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 /* ------------------------------------------------------------------ */
 /*  App component                                                       */
 /* ------------------------------------------------------------------ */
@@ -2160,6 +2492,9 @@ function App() {
         </div>
 
         {isMax && dataHealth && <DataHealthCard data={dataHealth} />}
+
+        {/* Shared Access (Max only) — accountant share links */}
+        {isMax && <ShareLinksSection />}
 
         {/* Source Breakdown Row */}
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
