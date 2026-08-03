@@ -193,6 +193,62 @@ function Home() {
         </div>
       </section>
 
+      {/* Max Section */}
+      <section className="bg-gradient-to-b from-white to-slate-50 px-6 py-20 dark:from-slate-800 dark:to-slate-900">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="mb-4 inline-block rounded-full bg-gradient-to-r from-amber-100 to-purple-100 px-4 py-1 text-sm font-medium text-purple-700 dark:from-amber-900/40 dark:to-purple-900/40 dark:text-purple-300">
+            CoinSight Max
+          </span>
+          <h2 className="mb-4 text-3xl font-bold text-slate-900 dark:text-slate-100">
+            Tax-Ready Precision for Serious Investors
+          </h2>
+          <div className="mx-auto mb-4 grid max-w-sm grid-cols-2 gap-3 text-left">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-700">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Monthly</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100">$9.99<span className="text-xs font-normal text-slate-500">/mo</span></p>
+            </div>
+            <div className="rounded-lg border-2 border-purple-500 bg-gradient-to-br from-purple-50 to-amber-50 p-3 text-left dark:from-purple-900/20 dark:to-amber-900/20">
+              <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">Annual · Best Value</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100">$100<span className="text-xs font-normal text-slate-500">/yr</span></p>
+            </div>
+          </div>
+          <p className="mb-8 text-lg text-slate-600 dark:text-slate-400">
+            Everything in Pro, plus exact cost basis and realized gains — built for tax season.
+          </p>
+          <ul className="mx-auto mb-8 max-w-md space-y-3 text-left">
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 text-purple-500">✓</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Everything in Pro</strong> — unlimited coins, CSV import, ledger, alerts, multi-wallet &amp; more</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 text-purple-500">✓</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>FIFO lot tracking</strong> — every buy becomes a lot, matched first-in-first-out</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 text-purple-500">✓</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Realized P&amp;L</strong> — exact gains and losses on every sell, per symbol</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 text-purple-500">✓</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Per-lot cost basis</strong> — see remaining amounts and basis for each acquisition</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 text-purple-500">✓</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Tax-ready exports</strong> — FIFO-matched CSV &amp; PDF reports you can hand to your accountant</span>
+            </li>
+          </ul>
+          <Link
+            to="/signup"
+            className="inline-block rounded-lg bg-gradient-to-r from-amber-500 to-purple-600 px-8 py-3 text-lg font-medium text-white transition-opacity duration-150 hover:opacity-90"
+          >
+            Get Started Free
+          </Link>
+          <p className="mt-3 text-sm text-slate-400 dark:text-slate-500">
+            Upgrade to Max from inside the app
+          </p>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="border-t border-slate-800 bg-slate-900 px-6 py-8 dark:border-slate-700 dark:bg-slate-950">
         <p className="text-center text-sm text-slate-400">

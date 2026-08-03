@@ -15,6 +15,7 @@ type Transaction = {
   tx_hash: string;
   tx_date: string;
   notes: string;
+  realized_pnl: number | null;
   created_at: string;
 };
 
@@ -22,6 +23,7 @@ type Props = {
   transactions: Transaction[];
   loading: boolean;
   onDelete: (id: number) => void;
+  isMax?: boolean;
 };
 
 const TYPE_BADGES: Record<string, { label: string; cls: string }> = {
@@ -80,7 +82,7 @@ function formatTime(iso: string): string {
   }
 }
 
-export default function TransactionLedger({ transactions, loading, onDelete }: Props) {
+export default function TransactionLedger({ transactions, loading, onDelete, isMax = false }: Props) {
   const [isOpen, setIsOpen] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -108,12 +110,26 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
   const summary = useMemo(() => {
     let totalBuy = 0;
     let totalSell = 0;
+    let totalRealizedPnl = 0;
     for (const tx of filtered) {
       if (tx.type === "buy") totalBuy += tx.amount_usd;
-      if (tx.type === "sell") totalSell += tx.amount_usd;
+      if (tx.type === "sell") {
+        totalSell += tx.amount_usd;
+        if (tx.realized_pnl != null) totalRealizedPnl += tx.realized_pnl;
+      }
     }
-    return { totalBuy, totalSell, netFlow: totalSell - totalBuy };
+    return { totalBuy, totalSell, netFlow: totalSell - totalBuy, totalRealizedPnl };
   }, [filtered]);
+
+  // Cost basis per row: buys = amount paid; sells = proceeds - realized P&L (FIFO)
+  const costBasisFor = (tx: Transaction): number | null => {
+    const type = tx.type.toLowerCase();
+    if (type === "buy") return tx.amount_usd;
+    if (type === "sell" && tx.realized_pnl != null) {
+      return Number(tx.amount_usd) - Number(tx.realized_pnl);
+    }
+    return null;
+  };
 
   return (
     <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800">
@@ -221,7 +237,13 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                       <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Symbol</th>
                       <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Amount</th>
                       <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">USD Value</th>
+                      {isMax && (
+                        <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Cost Basis</th>
+                      )}
                       <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Fee</th>
+                      {isMax && (
+                        <th className="px-2 sm:px-3 py-1.5 text-right font-medium text-slate-500 dark:text-slate-400">Realized P&amp;L</th>
+                      )}
                       <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Exchange</th>
                       <th className="px-2 sm:px-3 py-1.5 font-medium text-slate-500 dark:text-slate-400">Notes</th>
                       <th className="w-8 px-1 py-1.5" />
@@ -245,6 +267,14 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                           <td className="px-2 sm:px-3 py-1 font-mono font-medium text-slate-900 dark:text-slate-100">{tx.symbol}</td>
                           <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtCrypto(tx.amount)}</td>
                           <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{fmtUsd(tx.amount_usd)}</td>
+                          {isMax && (
+                            <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                              {(() => {
+                                const cb = costBasisFor(tx);
+                                return cb != null ? fmtUsd(cb) : "—";
+                              })()}
+                            </td>
+                          )}
                           <td className="whitespace-nowrap px-2 sm:px-3 py-1 text-right font-mono text-slate-500 dark:text-slate-400">
                             {tx.fee > 0 ? (
                               <span>
@@ -255,6 +285,17 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                               "—"
                             )}
                           </td>
+                          {isMax && (
+                            <td className="px-2 sm:px-3 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                              {tx.type.toLowerCase() === "sell" && tx.realized_pnl != null ? (
+                                <span className={tx.realized_pnl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                  {tx.realized_pnl >= 0 ? "+" : "−"}{fmtUsd(Math.abs(tx.realized_pnl))}
+                                </span>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          )}
                           <td className="px-2 sm:px-3 py-1">
                             {exBadge ? (
                               <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${exBadge.cls}`}>
@@ -294,11 +335,19 @@ export default function TransactionLedger({ transactions, loading, onDelete }: P
                   <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">{fmtUsd(summary.totalSell)}</span>
                 </div>
                 <div>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">Net Flow: </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">Net Cash Flow: </span>
                   <span className={`text-[11px] font-semibold ${summary.netFlow >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                     {summary.netFlow >= 0 ? "+" : ""}{fmtUsd(summary.netFlow)}
                   </span>
                 </div>
+                {isMax && (
+                  <div>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">Realized P&amp;L: </span>
+                    <span className={`text-[11px] font-semibold ${summary.totalRealizedPnl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                      {summary.totalRealizedPnl >= 0 ? "+" : "−"}{fmtUsd(Math.abs(summary.totalRealizedPnl))}
+                    </span>
+                  </div>
+                )}
               </div>
             </>
           )}

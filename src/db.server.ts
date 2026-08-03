@@ -22,6 +22,13 @@ db.run(`
     created_at TEXT DEFAULT (datetime('now'))
   )
 `);
+
+// Migration: add is_max column to users if it doesn't exist (non-destructive)
+let userColumns =
+  db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+if (!userColumns.some((c) => c.name === "is_max")) {
+  db.run("ALTER TABLE users ADD COLUMN is_max INTEGER DEFAULT 0");
+}
 db.run(`
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,6 +189,36 @@ try {
   db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_dedup ON transactions(user_id, exchange_source, tx_date, symbol, type, amount)");
 } catch { /* index may already exist */ }
 
+// Migration: add realized_pnl column to transactions if it doesn't exist (nullable —
+// NULL means the sell has not been matched against FIFO lots yet)
+let txColumns =
+  db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
+if (!txColumns.some((c) => c.name === "realized_pnl")) {
+  db.run("ALTER TABLE transactions ADD COLUMN realized_pnl REAL");
+}
+
+// Lots table — FIFO cost-basis lots created on buys, consumed on sells
+db.run(`
+  CREATE TABLE IF NOT EXISTS lots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    coin_id TEXT,
+    amount REAL NOT NULL,
+    cost_basis REAL NOT NULL,
+    purchase_price REAL,
+    purchase_date TEXT,
+    source_tx_id INTEGER,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`);
+
+// Index on (user_id, symbol, purchase_date) for fast FIFO lookups
+try {
+  db.run("CREATE INDEX IF NOT EXISTS idx_lots_user_symbol_date ON lots(user_id, symbol, purchase_date)");
+} catch { /* index may already exist */ }
+
 // Password reset tokens table
 db.run(`
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -214,6 +251,7 @@ export interface Transaction {
   tx_hash: string;
   tx_date: string;
   notes: string;
+  realized_pnl: number | null;
   created_at: string;
 }
 
@@ -253,9 +291,14 @@ export function addTransaction(
 
   if (result.changes === 0) return null; // duplicate, skipped
 
-  return db
+  const inserted = db
     .prepare("SELECT * FROM transactions WHERE id = ?")
     .get(Number(result.lastInsertRowid)) as Transaction;
+
+  // Maintain FIFO lots + realized P&L for this symbol
+  recomputeFIFOForSymbol(userId, inserted.symbol);
+
+  return inserted;
 }
 
 export function addTransactionsBatch(
@@ -299,14 +342,195 @@ export function addTransactionsBatch(
 
   insertBatch(txs);
 
+  // Rebuild FIFO lots + realized P&L for every symbol touched by this import.
+  // Recomputing per symbol (instead of inline) keeps ordering correct even when
+  // buys and sells are interleaved in the file.
+  const symbols = [...new Set(txs.map((t) => t.symbol.toUpperCase()))];
+  for (const sym of symbols) {
+    recomputeFIFOForSymbol(userId, sym);
+  }
+
   return { inserted, skipped, total: inserted + skipped };
 }
 
 export function deleteTransaction(userId: number, txId: number): boolean {
+  const row = db
+    .prepare("SELECT user_id, symbol FROM transactions WHERE id = ? AND user_id = ?")
+    .get(txId, userId) as { user_id: number; symbol: string } | undefined;
+  if (!row) return false;
+
   const result = db
     .prepare("DELETE FROM transactions WHERE id = ? AND user_id = ?")
     .run(txId, userId);
+
+  if (result.changes > 0) {
+    // Rebuild FIFO lots + realized P&L so deleting a buy (removes its lot) or
+    // a sell (restores consumed lots) keeps the lot ledger consistent.
+    recomputeFIFOForSymbol(userId, row.symbol);
+  }
   return result.changes > 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  FIFO lot helpers (CoinSight Max)                                    */
+/* ------------------------------------------------------------------ */
+export interface Lot {
+  id: number;
+  user_id: number;
+  symbol: string;
+  coin_id: string | null;
+  amount: number;
+  cost_basis: number;
+  purchase_price: number | null;
+  purchase_date: string | null;
+  source_tx_id: number | null;
+  created_at: string;
+}
+
+export function createLot(
+  userId: number,
+  symbol: string,
+  coinId: string | null,
+  amount: number,
+  costBasis: number,
+  purchasePrice: number | null,
+  purchaseDate: string | null,
+  sourceTxId: number | null,
+): Lot | null {
+  if (!amount || amount <= 0) return null;
+  const result = db
+    .prepare(
+      `INSERT INTO lots (user_id, symbol, coin_id, amount, cost_basis, purchase_price, purchase_date, source_tx_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(userId, symbol.toUpperCase(), coinId, amount, costBasis, purchasePrice, purchaseDate, sourceTxId);
+  return db
+    .prepare("SELECT * FROM lots WHERE id = ?")
+    .get(Number(result.lastInsertRowid)) as Lot;
+}
+
+export function getLots(userId: number): Lot[] {
+  return db
+    .prepare(
+      "SELECT * FROM lots WHERE user_id = ? ORDER BY purchase_date ASC, id ASC",
+    )
+    .all(userId) as Lot[];
+}
+
+export function getLotsBySymbol(userId: number, symbol: string): Lot[] {
+  return db
+    .prepare(
+      "SELECT * FROM lots WHERE user_id = ? AND symbol = ? ORDER BY purchase_date ASC, id ASC",
+    )
+    .all(userId, symbol.toUpperCase()) as Lot[];
+}
+
+/** Reduce a lot's remaining amount (and cost basis proportionally). */
+export function consumeLot(lotId: number, amount: number): boolean {
+  const lot = db
+    .prepare("SELECT * FROM lots WHERE id = ?")
+    .get(lotId) as Lot | undefined;
+  if (!lot || amount <= 0) return false;
+
+  const remaining = lot.amount - amount;
+  if (remaining <= 1e-9) {
+    // Depleted — remove the lot entirely
+    db.prepare("DELETE FROM lots WHERE id = ?").run(lotId);
+    return true;
+  }
+  // Scale cost basis down proportionally to the remaining amount
+  const newCost = lot.cost_basis * (remaining / lot.amount);
+  db.prepare("UPDATE lots SET amount = ?, cost_basis = ? WHERE id = ?").run(
+    remaining,
+    newCost,
+    lotId,
+  );
+  return true;
+}
+
+/**
+ * Consume lots FIFO (oldest purchase date first) to match a sell.
+ * Returns the consumed lot segments for realized P&L computation.
+ */
+export function consumeLotsFIFO(
+  userId: number,
+  symbol: string,
+  sellAmount: number,
+): { lotId: number; consumedAmount: number; costBasis: number }[] {
+  const lots = getLotsBySymbol(userId, symbol);
+  const consumed: { lotId: number; consumedAmount: number; costBasis: number }[] = [];
+
+  let remainingToSell = sellAmount;
+  for (const lot of lots) {
+    if (remainingToSell <= 0) break;
+    const take = Math.min(lot.amount, remainingToSell);
+    const takeCost = lot.cost_basis * (take / lot.amount);
+    consumed.push({ lotId: lot.id, consumedAmount: take, costBasis: takeCost });
+    consumeLot(lot.id, take);
+    remainingToSell -= take;
+  }
+
+  // Any amount we couldn't match to a lot has zero cost basis
+  if (remainingToSell > 1e-9) {
+    consumed.push({
+      lotId: -1,
+      consumedAmount: remainingToSell,
+      costBasis: 0,
+    });
+  }
+
+  return consumed;
+}
+
+/**
+ * Rebuild FIFO lots and realized P&L for one user/symbol from the full
+ * transaction history. Idempotent — used after inserts, imports, and deletes.
+ */
+export function recomputeFIFOForSymbol(userId: number, symbol: string): void {
+  const sym = symbol.toUpperCase();
+  const txs = db
+    .prepare(
+      "SELECT * FROM transactions WHERE user_id = ? AND symbol = ? ORDER BY tx_date ASC, id ASC",
+    )
+    .all(userId, sym) as Transaction[];
+
+  // Wipe existing lots for this user/symbol and rebuild from scratch
+  db.prepare("DELETE FROM lots WHERE user_id = ? AND symbol = ?").run(userId, sym);
+
+  for (const tx of txs) {
+    const type = tx.type.toLowerCase();
+    if (type === "buy") {
+      createLot(userId, sym, tx.coin_id, tx.amount, tx.amount_usd, tx.price_per_unit, tx.tx_date, tx.id);
+    } else if (type === "sell") {
+      const consumed = consumeLotsFIFO(userId, sym, tx.amount);
+      const costBasis = consumed.reduce((sum, c) => sum + c.costBasis, 0);
+      const proceeds = Number(tx.amount_usd) || Number(tx.amount) * Number(tx.price_per_unit) || 0;
+      const realizedPnl = proceeds - costBasis;
+      db.prepare("UPDATE transactions SET realized_pnl = ? WHERE id = ?").run(
+        realizedPnl,
+        tx.id,
+      );
+    }
+  }
+}
+
+/** Realized P&L summary from sell transactions matched against FIFO lots. */
+export function getRealizedPnLSummary(
+  userId: number,
+): { symbol: string; soldAmount: number; proceeds: number; costBasis: number; realizedPnl: number }[] {
+  return db
+    .prepare(
+      `SELECT symbol,
+              SUM(amount) as soldAmount,
+              SUM(amount_usd) as proceeds,
+              SUM(COALESCE(amount_usd, 0) - COALESCE(realized_pnl, 0)) as costBasis,
+              SUM(COALESCE(realized_pnl, 0)) as realizedPnl
+       FROM transactions
+       WHERE user_id = ? AND LOWER(type) = 'sell'
+       GROUP BY symbol
+       ORDER BY symbol`,
+    )
+    .all(userId) as any[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -316,6 +540,7 @@ export interface User {
   id: number;
   email: string;
   is_pro: number;
+  is_max: number;
   created_at: string;
 }
 
@@ -331,6 +556,7 @@ export function createUser(
     id: Number(result.lastInsertRowid),
     email,
     is_pro: 0,
+    is_max: 0,
     created_at: new Date().toISOString(),
   };
 }
@@ -344,7 +570,7 @@ export function getUserByEmail(
 }
 
 export function getUserById(id: number): User | undefined {
-  return db.prepare("SELECT id, email, is_pro, created_at FROM users WHERE id = ?").get(id) as any;
+  return db.prepare("SELECT id, email, is_pro, is_max, created_at FROM users WHERE id = ?").get(id) as any;
 }
 
 export function setUserPro(userId: number, isPro: boolean): void {
@@ -352,6 +578,22 @@ export function setUserPro(userId: number, isPro: boolean): void {
     isPro ? 1 : 0,
     userId,
   );
+}
+
+/** Activate (or deactivate) the Max tier. Max always implies Pro. */
+export function setUserMax(userId: number, isMax: boolean): void {
+  if (isMax) {
+    db.prepare("UPDATE users SET is_max = 1, is_pro = 1 WHERE id = ?").run(userId);
+  } else {
+    db.prepare("UPDATE users SET is_max = 0 WHERE id = ?").run(userId);
+  }
+}
+
+export function isUserMax(userId: number): boolean {
+  const row = db
+    .prepare("SELECT is_max FROM users WHERE id = ?")
+    .get(userId) as { is_max: number } | undefined;
+  return row?.is_max === 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -375,7 +617,7 @@ export function createSession(userId: number): string {
 export function validateSession(token: string): User | null {
   const row = db
     .prepare(
-      `SELECT u.id, u.email, u.is_pro, u.created_at
+      `SELECT u.id, u.email, u.is_pro, u.is_max, u.created_at
        FROM sessions s
        JOIN users u ON s.user_id = u.id
        WHERE s.token = ? AND s.expires_at > ?`,
