@@ -244,8 +244,8 @@ export default function QuickToolsPanel(props: QuickToolsPanelProps) {
   const toggleOpen = () => setOpen((o) => !o);
   const closePanel = () => setOpen(false);
 
-  // Total interesting items for badge
-  const totalItems = topCoins.length + (isPro ? watchlist.length + trendingCoins.length : 0);
+  // Triggered alert count for badge
+  const triggeredAlertCount = alerts.filter((a) => a.triggered === 1).length;
 
   /* -- render ------------------------------------------------------- */
   return (
@@ -260,9 +260,9 @@ export default function QuickToolsPanel(props: QuickToolsPanelProps) {
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          {totalItems > 0 && (
+          {triggeredAlertCount > 0 && (
             <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-              {totalItems > 99 ? "99+" : totalItems}
+              {triggeredAlertCount > 99 ? "99+" : triggeredAlertCount}
             </span>
           )}
         </button>
