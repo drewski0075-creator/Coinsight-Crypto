@@ -255,7 +255,7 @@ export default function QuickToolsPanel(props: QuickToolsPanelProps) {
         <button
           onClick={toggleOpen}
           aria-label="Open Quick Tools"
-          className="fixed right-4 top-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-colors hover:bg-blue-700 sm:right-6 sm:top-6"
+          className="fixed right-4 top-20 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-colors hover:bg-blue-700 sm:right-6 sm:top-6"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
