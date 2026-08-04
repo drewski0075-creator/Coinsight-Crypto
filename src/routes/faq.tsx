@@ -111,24 +111,24 @@ function Faq() {
         <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
           <Link to="/" className="flex items-center gap-2">
             <img src="/logo-icon.png" alt="CoinSight" className="h-8 w-8" />
-            <span className="text-xl font-bold text-slate-900 dark:text-slate-100">CoinSight</span>
+            <span className="hidden text-xl font-bold text-slate-900 dark:text-slate-100 sm:inline">CoinSight</span>
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Link
               to="/faq"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400"
+              className="rounded-lg px-2 py-2 sm:px-4 text-sm font-medium text-blue-600 dark:text-blue-400"
             >
               FAQ
             </Link>
             <Link
               to="/login"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+              className="rounded-lg px-2 py-2 sm:px-4 text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
             >
               Login
             </Link>
             <Link
               to="/signup"
-              className="rounded-lg border border-blue-600 px-4 py-2 text-sm font-medium text-blue-600 transition-colors duration-150 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+              className="rounded-lg border border-blue-600 px-2 py-2 sm:px-4 text-sm font-medium text-blue-600 transition-colors duration-150 hover:bg-blue-50 dark:hover:bg-blue-900/30"
             >
               Sign Up
             </Link>
