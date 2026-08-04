@@ -204,7 +204,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
     <div className="mx-auto max-w-3xl px-6 py-8">
       <Link
         to="/"
-        className="mb-6 inline-flex min-h-11 items-center gap-1 text-sm" font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
+        className="mb-6 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
       >
         {"\u2190"} Back to Home
       </Link>
@@ -305,7 +305,7 @@ function CoinDetailPage() {
               window.location.href = "/app";
             }
           }}
-          className="mb-6 inline-flex min-h-11 items-center gap-1 text-sm" font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
+          className="mb-6 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
         >
           {"←"} Back
         </a>
