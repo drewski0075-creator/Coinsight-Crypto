@@ -1933,35 +1933,35 @@ function App() {
     <div className="min-h-dvh bg-slate-50 dark:bg-slate-900">
       {/* App Bar */}
       <header className="sticky top-0 z-50 h-16 bg-white shadow-sm dark:bg-slate-800 dark:shadow-slate-900/50">
-        <div className="mx-auto flex h-full max-w-4xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-2">
-            <img src="/logo-icon.png" alt="CoinSight" className="h-7 w-7" />
-            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">CoinSight</span>
+        <div className="mx-auto flex h-full max-w-4xl items-center justify-between gap-2 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            <img src="/logo-icon.png" alt="CoinSight" className="h-7 w-7 shrink-0" />
+            <span className="truncate text-base font-bold text-slate-900 dark:text-slate-100 sm:text-lg">CoinSight</span>
             {isMax && (
-              <span className="ml-1 rounded-full bg-gradient-to-r from-amber-500 to-purple-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+              <span className="ml-0.5 shrink-0 rounded-full bg-gradient-to-r from-amber-500 to-purple-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white sm:ml-1 sm:px-2 sm:text-[10px]">
                 MAX
               </span>
             )}
             {isPro && !isMax && (
-              <span className="ml-1 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+              <span className="ml-0.5 shrink-0 rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white sm:ml-1 sm:px-2 sm:text-[10px]">
                 PRO
               </span>
             )}
           </div>
-          <nav className="flex items-center gap-6">
-            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Dashboard</span>
-            <Link to="/reports" className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">
-              Reports {!isPro && <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">PRO</span>}
+          <nav className="flex min-w-0 shrink items-center gap-3 sm:gap-6">
+            <span className="shrink-0 text-sm font-medium text-blue-600 dark:text-blue-400">Dashboard</span>
+            <Link to="/reports" className="shrink-0 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">
+              Reports {!isPro && <span className="ml-1 hidden rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 sm:inline-block">PRO</span>}
             </Link>
             <Link
               to="/"
-              className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+              className="hidden shrink-0 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 sm:block"
             >
               Home
             </Link>
             <button
               onClick={handleLogout}
-              className="text-sm font-medium text-slate-500 transition-colors hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
+              className="shrink-0 text-sm font-medium text-slate-500 transition-colors hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
             >
               Logout
             </button>
