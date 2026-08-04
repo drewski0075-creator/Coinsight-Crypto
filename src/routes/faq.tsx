@@ -25,7 +25,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         CoinSight is read-only. We never hold your funds, never ask for private keys, and never have the
-        ability to move your crypto. Exchange holdings are manually entered or imported via CSV. Wallet
+        ability to move your crypto. Exchange holdings are manually entered or imported via transaction history file (CSV). Wallet
         balances use public blockchain data — we look up what&apos;s on-chain using your public address,
         which anyone can do. Your data lives in an encrypted SQLite database. At every step, you remain in
         full control of your assets: CoinSight only ever watches, it can never touch what you own.
@@ -48,7 +48,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         Free tracks up to 10 coins with 60-second price refresh. Pro ($7.99/mo or $80/yr) adds unlimited
-        coins, CSV import, transaction ledger, price alerts, multi-wallet support, 30-second refresh, and
+        coins, exchange history import (CSV), transaction ledger, price alerts, multi-wallet support, 30-second refresh, and
         ad-free. Max ($9.99/mo or $100/yr) adds FIFO lot tracking, realized P&L, per-lot cost basis, and
         tax-ready reports. All tiers include real-time CoinGecko pricing. Start free and upgrade whenever
         you need more — you can change plans from inside the app at any time.
@@ -67,13 +67,21 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     ),
   },
   {
-    q: "What CSV formats do you support?",
+    q: "What exchanges can I import history from?",
     a: (
       <>
-        Coinbase, Binance, Kraken, and Robinhood CSV exports are auto-detected — just drag and drop and
+        Coinbase, Binance, Kraken, and Robinhood transaction history files are auto-detected — just drag and drop and
         we figure out the format for you. Every import is deduplicated so the same transaction can&apos;t
         be counted twice. If you have years of history spread across many files, the Historical Cleanup
         add-on ($39.99 one-time) processes up to 20 files at once with cross-file deduplication.
+      </>
+    ),
+  },
+  {
+    q: "What is a CSV file?",
+    a: (
+      <>
+        CSV stands for Comma-Separated Values. It is a standard spreadsheet file that exchanges let you download — it contains your full trade history. You do not need any technical knowledge or to know anything about the format. Just download your history from Coinbase, Binance, Kraken, or Robinhood, then drag and drop the file into CoinSight.
       </>
     ),
   },
@@ -82,7 +90,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         It&apos;s a one-time purchase ($39.99) for anyone with years of scattered trade history. You upload
-        up to 20 CSV files at once, CoinSight auto-detects each file&apos;s format, deduplicates across all
+        up to 20 transaction history files (CSV) at once, CoinSight auto-detects each file&apos;s format, deduplicates across all
         of them so nothing is double-counted, and rebuilds your FIFO lots from the merged history. The
         result: one clean, reconciled ledger — perfect for importing a decade of exchange exports in a
         single pass instead of file by file.

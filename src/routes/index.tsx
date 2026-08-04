@@ -13,10 +13,10 @@ const compareRows: { feature: string; free: Cell; pro: Cell; max: Cell }[] = [
   { feature: "Dashboard with Top 5 sparkline charts", free: true, pro: true, max: true },
   { feature: "Browser wallet detection", free: true, pro: true, max: true },
   { feature: "Price alerts (email notifications)", free: false, pro: true, max: true },
-  { feature: "CSV import — Coinbase, Binance, Kraken, Robinhood", free: false, pro: true, max: true },
+  { feature: "Import exchange history (CSV) — Coinbase, Binance, Kraken, Robinhood", free: false, pro: true, max: true },
   { feature: "Transaction ledger with buy/sell/net summaries", free: false, pro: true, max: true },
-  { feature: "CSV export of portfolio", free: false, pro: true, max: true },
-  { feature: "Tax reports (CSV + PDF)", free: false, pro: true, max: true },
+  { feature: "Export portfolio data (CSV)", free: false, pro: true, max: true },
+  { feature: "Tax reports — spreadsheet & PDF", free: false, pro: true, max: true },
   { feature: "Exchange holdings tracking", free: false, pro: true, max: true },
   { feature: "Source breakdown (on-chain vs exchange vs manual)", free: false, pro: true, max: true },
   { feature: "Multi-wallet address book (5 wallets)", free: false, pro: true, max: true },
@@ -104,7 +104,7 @@ function Home() {
           Your Crypto Balance Sheet
         </h1>
         <p className="mx-auto mb-8 max-w-xl text-center text-lg leading-relaxed text-slate-600 dark:text-slate-400">
-          Track on-chain wallets, connect exchange holdings, import your CSV history — finally know exactly what you own. The cleanest crypto portfolio tracker, now with full transaction reconciliation.
+          Track on-chain wallets, connect exchange holdings, import your exchange transaction history (CSV) — finally know exactly what you own. The cleanest crypto portfolio tracker, now with full transaction reconciliation.
         </p>
         <Link
           to="/signup"
@@ -136,7 +136,7 @@ function Home() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 transition-shadow hover:shadow-md dark:border-slate-600 dark:bg-slate-700">
             <div className="mb-4 text-4xl">📥</div>
             <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
-              CSV Import <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Pro</span>
+              Exchange History Import (CSV) <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Pro</span>
             </h3>
             <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
               Drag-and-drop your Coinbase, Binance, Kraken, or Robinhood history. Auto-detects format and deduplicates — your scattered history becomes one clean ledger.
@@ -214,7 +214,7 @@ function Home() {
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-green-500">✓</span>
-              <span className="text-slate-700 dark:text-slate-300"><strong>CSV Import</strong> — drag-and-drop Coinbase, Binance, Kraken &amp; Robinhood history with auto-detection and deduplication</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Exchange History Import</strong> — drag-and-drop Coinbase, Binance, Kraken &amp; Robinhood history with auto-detection and deduplication</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-green-500">✓</span>
@@ -242,11 +242,11 @@ function Home() {
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-green-500">✓</span>
-              <span className="text-slate-700 dark:text-slate-300"><strong>Tax Reports</strong> — Total Wealth &amp; Portfolio P&amp;L summary cards with CSV and PDF exports</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Tax Reports</strong> — Total Wealth &amp; Portfolio P&amp;L summary cards with spreadsheet and PDF exports</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-green-500">✓</span>
-              <span className="text-slate-700 dark:text-slate-300"><strong>CSV Export</strong> — download your portfolio anytime</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Spreadsheet Export</strong> — download your portfolio anytime</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-green-500">✓</span>
@@ -359,7 +359,7 @@ function Home() {
           <ul className="mx-auto mb-8 max-w-md space-y-3 text-left">
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-purple-500">✓</span>
-              <span className="text-slate-700 dark:text-slate-300"><strong>Everything in Pro</strong> — unlimited coins, CSV import, ledger, alerts, multi-wallet &amp; more</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Everything in Pro</strong> — unlimited coins, exchange history import, ledger, alerts, multi-wallet &amp; more</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-purple-500">✓</span>
@@ -415,13 +415,13 @@ function Home() {
                 </span>
               </div>
               <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                Import years of scattered trade history in one shot. Upload up to 20 CSV files at once,
+                Import years of scattered trade history in one shot. Upload up to 20 exchange history files (CSV) at once,
                 auto-detect their format, deduplicate across every file, and rebuild your FIFO lots — a single
                 pass from mess to reconciled ledger.
               </p>
               <ul className="mt-4 grid gap-2 text-sm text-slate-600 dark:text-slate-400 sm:grid-cols-2">
                 <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-green-500">✓</span> Up to 20 CSV files at once
+                  <span className="mt-0.5 text-green-500">✓</span> Up to 20 exchange history files (CSV) at once
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-green-500">✓</span> Auto-detect format

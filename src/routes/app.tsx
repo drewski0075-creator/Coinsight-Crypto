@@ -2441,7 +2441,7 @@ function App() {
                     onClick={exportCSV}
                     className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
                   >
-                    Export CSV
+                    Export Spreadsheet
                   </button>
                 </span>
               ) : (
@@ -2759,7 +2759,7 @@ function App() {
 
 
 
-        {/* CSV Import (Pro only) */}
+        {/* Import Exchange History (Pro only) */}
         {isPro && (
           <CsvImportSection
             onImportComplete={handleImportComplete}
@@ -3019,12 +3019,12 @@ function App() {
                   <ul className="mt-3 flex-1 space-y-2 text-xs text-slate-600 dark:text-slate-400">
                     <li>✓ Everything in Free</li>
                     <li>✓ Unlimited coins</li>
-                    <li>✓ CSV import (Coinbase, Binance, Kraken, Robinhood)</li>
+                    <li>✓ Exchange history import (Coinbase, Binance, Kraken, Robinhood)</li>
                     <li>✓ Transaction ledger</li>
                     <li>✓ Price alerts + email notifications</li>
                     <li>✓ Multi-wallet address book</li>
                     <li>✓ Exchange holdings tracking</li>
-                    <li>✓ Tax-ready CSV &amp; PDF exports</li>
+                    <li>✓ Tax-ready spreadsheet &amp; PDF exports</li>
                     <li>✓ Ad-free, 30-second refresh, Pro badge</li>
                   </ul>
                   <div className="mt-4 grid grid-cols-2 gap-2">
