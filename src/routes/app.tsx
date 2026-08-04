@@ -1949,19 +1949,19 @@ function App() {
             )}
           </div>
           <nav className="flex min-w-0 shrink items-center gap-3 sm:gap-6">
-            <span className="shrink-0 text-sm font-medium text-blue-600 dark:text-blue-400">Dashboard</span>
-            <Link to="/reports" className="shrink-0 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">
+            <span className="flex min-h-11 shrink-0 items-center text-sm font-medium text-blue-600 dark:text-blue-400">Dashboard</span>
+            <Link to="/reports" className="flex min-h-11 shrink-0 items-center text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">
               Reports {!isPro && <span className="ml-1 hidden rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 sm:inline-block">PRO</span>}
             </Link>
             <Link
               to="/"
-              className="hidden shrink-0 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 sm:block"
+              className="hidden min-h-11 shrink-0 items-center text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 sm:flex"
             >
               Home
             </Link>
             <button
               onClick={handleLogout}
-              className="shrink-0 text-sm font-medium text-slate-500 transition-colors hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
+              className="flex min-h-11 shrink-0 items-center text-sm font-medium text-slate-500 transition-colors hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
             >
               Logout
             </button>

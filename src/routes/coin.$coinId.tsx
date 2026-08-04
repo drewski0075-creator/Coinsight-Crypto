@@ -167,7 +167,7 @@ function LoadingSkeleton() {
       </div>
 
       {/* Stats grid skeleton */}
-      <div className="mb-8 grid grid-cols-2 gap-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-800">
             <div className="mb-2 h-3 w-24 rounded bg-slate-200 dark:bg-slate-700" />
@@ -204,7 +204,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
     <div className="mx-auto max-w-3xl px-6 py-8">
       <Link
         to="/"
-        className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
+        className="mb-6 inline-flex min-h-11 items-center gap-1 text-sm" font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
       >
         {"\u2190"} Back to Home
       </Link>
@@ -305,7 +305,7 @@ function CoinDetailPage() {
               window.location.href = "/app";
             }
           }}
-          className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
+          className="mb-6 inline-flex min-h-11 items-center gap-1 text-sm" font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
         >
           {"←"} Back
         </a>
@@ -341,7 +341,7 @@ function CoinDetailPage() {
         </div>
 
         {/* Stats grid */}
-        <div className="mb-8 grid grid-cols-2 gap-4">
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* Market Cap */}
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-600 dark:bg-slate-800">
             <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
