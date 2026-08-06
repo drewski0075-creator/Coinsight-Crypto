@@ -1,7 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  checkAuthFn, exportTaxCsvFn, exportTaxPdfFn, getAuthFn,
+  checkAuthFn, exportTaxCsvFn, exportTaxPdfFn, getAuthFn, trackPageViewFn,
   createShareLinkFn, revokeShareLinkFn, listShareLinksFn,
 } from "~/server-fns";
 
@@ -344,6 +344,9 @@ const ShareLinksSection = React.memo(function ShareLinksSection() {
 });
 
 function Reports() {
+  useEffect(() => {
+    trackPageViewFn({ data: { path: "/reports" } }).catch(() => {});
+  }, []);
   const [isPro, setIsPro] = useState(false);
   const [isMax, setIsMax] = useState(false);
   const [email, setEmail] = useState("");

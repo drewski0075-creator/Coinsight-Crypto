@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getCookie, setCookie, deleteCookie } from "@tanstack/react-start/server";
+import { getCookie, setCookie, deleteCookie, getRequestHeader } from "@tanstack/react-start/server";
 import {
   validateSession,
   deleteSession,
@@ -57,6 +57,8 @@ import {
   createShareToken,
   revokeShareToken,
   listShareTokens,
+  trackPageView,
+  getPageViewStats,
 } from "~/db.server";
 import { SYMBOL_MAP } from "~/constants";
 import { getCached, setCache } from "~/lib/wallet-cache";
@@ -1239,4 +1241,40 @@ export const cleanupMultiImportFn = createServerFn({ method: "POST" }).handler(a
 export const exportCleanedLedgerFn = createServerFn().handler(async () => {
   const token=getCookie("coinsight_session"); const user=token ? validateSession(token) : null; if (!user) throw new Error("Not authenticated"); if (user.is_max!==1 || !isUserCleanup(user.id)) throw new Error("Purchase a cleanup pass first.");
   const rows=dbGetTransactions(user.id); return ["Date,Type,Asset,Amount,Cost Basis,Proceeds,Gains/Losses,Exchange", ...rows.map(t=>[t.tx_date,t.type,t.symbol,t.amount,t.amount_usd,t.amount_usd,t.realized_pnl ?? "",t.exchange_source].map(csvCell).join(","))].join("\n");
+});
+
+/* ------------------------------------------------------------------ */
+/*  Page views: track (privacy-native, no auth required)               */
+/* ------------------------------------------------------------------ */
+function shortenUserAgent(ua: string | undefined | null): string {
+  if (!ua) return "Other";
+  const u = ua.toLowerCase();
+  if (u.includes("edg/")) return "Edge";
+  if (u.includes("opr/") || u.includes("opera")) return "Opera";
+  if (u.includes("chrome")) return "Chrome";
+  if (u.includes("firefox")) return "Firefox";
+  if (u.includes("safari")) return "Safari";
+  if (u.includes("msie") || u.includes("trident")) return "IE";
+  return "Other";
+}
+
+export const trackPageViewFn = createServerFn().handler(
+  async (input: { data: { path: string } }) => {
+    const path = (input.data && input.data.path) || "";
+    if (!path) return { success: false };
+    // Only the browser family is stored — never the full user agent or IP
+    trackPageView(path, shortenUserAgent(getRequestHeader("user-agent")));
+    return { success: true };
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/*  Page views: stats (Pro only)                                       */
+/* ------------------------------------------------------------------ */
+export const getPageViewStatsFn = createServerFn().handler(async () => {
+  const token = getCookie("coinsight_session");
+  if (!token) throw new Error("Not authenticated");
+  const user = validateSession(token);
+  if (!user || user.is_pro !== 1) throw new Error("Page view stats require the Pro plan.");
+  return getPageViewStats();
 });

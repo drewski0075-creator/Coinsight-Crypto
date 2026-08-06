@@ -38,6 +38,8 @@ import {
   getPositionAuditFn,
   sendAlertEmailFn,
   getDataHealthFn,
+  trackPageViewFn,
+  getPageViewStatsFn,
 } from "~/server-fns";
 import {
   SYMBOL_MAP,
@@ -852,6 +854,10 @@ export const Route = createFileRoute("/app")({
 /* ------------------------------------------------------------------ */
 function App() {
   const navigate = useNavigate();
+  /* -- Privacy-native page view tracking ------------------------------ */
+  useEffect(() => {
+    trackPageViewFn({ data: { path: "/app" } }).catch(() => {});
+  }, []);
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [prices, setPrices] = useState<PriceData>({});
@@ -3103,6 +3109,8 @@ function App() {
 
       {/* Position History Drawer (Max only) — slide-out audit panel */}
       <PositionHistoryDrawer symbol={historySymbol} onClose={() => setHistorySymbol(null)} />
+      {/* Page Views analytics (Pro only) */}
+      {isPro && <PageViewsSection />}
     </div>
   );
 }
@@ -4236,3 +4244,98 @@ function ExchangeHoldingsSection({
     </div>
   );
 }
+
+/* ================================================================== */
+/*  PageViewsSection Component (Pro only — privacy-native analytics)    */
+/* ================================================================== */
+function PageViewsSection() {
+  const [stats, setStats] = useState<{
+    total: number;
+    week: number;
+    month: number;
+    perPath: { path: string; today: number; week: number; month: number; all_time: number }[];
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const s = await getPageViewStatsFn();
+      setStats(s);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load page view stats.");
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+    const t = setInterval(loadStats, 60_000);
+    return () => clearInterval(t);
+  }, [loadStats]);
+
+  const fmt = (n: number) => (n ?? 0).toLocaleString("en-US");
+
+  return (
+    <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-800">
+      <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-600">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">📊 Page Views</h3>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          Privacy-native analytics — only the page path and browser family are stored. No IPs, no full user agents.
+        </p>
+      </div>
+      <div className="px-5 py-4">
+        {error && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-400">
+            {error}
+          </div>
+        )}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg bg-slate-50 px-4 py-3 dark:bg-slate-900/50">
+            <p className="text-xs text-slate-500 dark:text-slate-400">All-time views</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{stats ? fmt(stats.total) : "—"}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 px-4 py-3 dark:bg-slate-900/50">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Last 7 days</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{stats ? fmt(stats.week) : "—"}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 px-4 py-3 dark:bg-slate-900/50">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Last 30 days</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{stats ? fmt(stats.month) : "—"}</p>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                <th className="px-2 py-2 font-semibold">Path</th>
+                <th className="px-2 py-2 text-right font-semibold">Today</th>
+                <th className="px-2 py-2 text-right font-semibold">This Week</th>
+                <th className="px-2 py-2 text-right font-semibold">This Month</th>
+                <th className="px-2 py-2 text-right font-semibold">All Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(stats?.perPath ?? []).map((r) => (
+                <tr key={r.path} className="border-b border-slate-100 dark:border-slate-700">
+                  <td className="px-2 py-2 font-mono text-xs text-slate-700 dark:text-slate-300">{r.path || "/"}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmt(r.today)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmt(r.week)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmt(r.month)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums font-medium text-slate-800 dark:text-slate-100">{fmt(r.all_time)}</td>
+                </tr>
+              ))}
+              {(!stats || stats.perPath.length === 0) && (
+                <tr>
+                  <td colSpan={5} className="px-2 py-4 text-center text-xs text-slate-400 dark:text-slate-500">
+                    No page views recorded yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+

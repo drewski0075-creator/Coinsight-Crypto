@@ -275,6 +275,77 @@ db.run(`
   )
 `);
 
+// Page views table — privacy-native analytics. Only stores the path, an ISO
+// 8601 timestamp, and the browser family. No IPs, no full user agents.
+// Non-destructive migration: PRAGMA table_info returns no rows when the table
+// doesn't exist yet, so we only CREATE when it's truly absent.
+{
+  const pvColumns = db.prepare("PRAGMA table_info(page_views)").all() as { name: string }[];
+  if (pvColumns.length === 0) {
+    db.run(`
+      CREATE TABLE page_views (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        user_agent_short TEXT NOT NULL DEFAULT 'Other'
+      )
+    `);
+  }
+}
+try {
+  db.run("CREATE INDEX IF NOT EXISTS idx_page_views_timestamp ON page_views(timestamp)");
+} catch { /* index may already exist */ }
+
+export interface PageViewStatsRow {
+  path: string;
+  today: number;
+  week: number;
+  month: number;
+  all_time: number;
+}
+
+export interface PageViewStats {
+  total: number;
+  week: number;
+  month: number;
+  perPath: PageViewStatsRow[];
+}
+
+export function trackPageView(path: string, userAgentShort: string): void {
+  const ts = new Date().toISOString();
+  db.prepare("INSERT INTO page_views (path, timestamp, user_agent_short) VALUES (?, ?, ?)").run(
+    path.slice(0, 200) || "/",
+    ts,
+    userAgentShort || "Other",
+  );
+}
+
+export function getPageViewStats(): PageViewStats {
+  const now = new Date();
+  // ISO 8601 strings compare lexicographically, so string >= works for UTC ranges
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const total = (db.prepare("SELECT COUNT(*) AS c FROM page_views").get() as { c: number }).c;
+  const week = (db.prepare("SELECT COUNT(*) AS c FROM page_views WHERE timestamp >= ?").get(weekAgo) as { c: number }).c;
+  const month = (db.prepare("SELECT COUNT(*) AS c FROM page_views WHERE timestamp >= ?").get(monthAgo) as { c: number }).c;
+  const perPath = db
+    .prepare(
+      `SELECT path,
+        SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) AS today,
+        SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) AS week,
+        SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) AS month,
+        COUNT(*) AS all_time
+       FROM page_views
+       GROUP BY path
+       ORDER BY all_time DESC, path ASC`,
+    )
+    .all(todayStart, weekAgo, monthAgo) as PageViewStatsRow[];
+
+  return { total, week, month, perPath };
+}
+
 export default db;
 
 /* ------------------------------------------------------------------ */

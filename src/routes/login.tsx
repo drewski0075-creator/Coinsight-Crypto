@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { loginFn } from "~/server-fns";
+import { useEffect, useState } from "react";
+import { loginFn, trackPageViewFn } from "~/server-fns";
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -8,6 +8,9 @@ export const Route = createFileRoute("/login")({
 
 function Login() {
   const navigate = useNavigate();
+  useEffect(() => {
+    trackPageViewFn({ data: { path: "/login" } }).catch(() => {});
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
