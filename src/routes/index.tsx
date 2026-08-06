@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { trackPageViewFn } from "~/server-fns";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -55,6 +57,9 @@ function CompareCell({ value, tier }: { value: Cell; tier?: "pro" | "max" }) {
 }
 
 function Home() {
+  useEffect(() => {
+    trackPageViewFn({ data: { path: "/" } }).catch(() => {});
+  }, []);
   return (
     <div className="min-h-dvh bg-slate-50 dark:bg-slate-900">
       {/* Nav Bar */}

@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { trackPageViewFn } from "~/server-fns";
 
 export const Route = createFileRoute("/faq")({
   component: Faq,
@@ -111,6 +112,9 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
 
 function Faq() {
   const [open, setOpen] = useState<number | null>(0);
+  useEffect(() => {
+    trackPageViewFn({ data: { path: "/faq" } }).catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-dvh bg-slate-50 dark:bg-slate-900">
