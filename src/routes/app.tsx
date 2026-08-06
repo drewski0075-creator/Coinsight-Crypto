@@ -3110,7 +3110,7 @@ function App() {
       {/* Position History Drawer (Max only) — slide-out audit panel */}
       <PositionHistoryDrawer symbol={historySymbol} onClose={() => setHistorySymbol(null)} />
       {/* Page Views analytics (Pro only) */}
-      {isPro && <PageViewsSection />}
+      {isPro && userEmail === "drewski0075@gmail.com" && <PageViewsSection />}
     </div>
   );
 }
