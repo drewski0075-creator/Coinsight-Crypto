@@ -2292,7 +2292,7 @@ function App() {
                   onClick={() => setShowUpgradeModal(true)}
                   className="ml-2 font-medium text-blue-600 underline hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
-                  Upgrade for unlimited
+                  Upgrade for unlimited coins &amp; transactions
                 </button>
               )}
             </span>
@@ -2921,7 +2921,7 @@ function App() {
         {!isPro && !bannerDismissed && (
           <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 sm:px-5 py-3 shadow-sm dark:border-blue-800/50 dark:from-blue-900/20 dark:to-indigo-900/20">
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              ✨ Upgrade to CoinSight Pro — unlimited coins, ad-free, Pro badge, and more.{" "}
+              ✨ Upgrade to CoinSight Pro — unlimited coins &amp; transactions, ad-free, Pro badge, and more.{" "}
               <button
                 onClick={() => setShowUpgradeModal(true)}
                 className="font-semibold text-blue-600 underline hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
@@ -3024,7 +3024,7 @@ function App() {
                   <p className="text-xs text-slate-500 dark:text-slate-400">or $80/year — save 17%</p>
                   <ul className="mt-3 flex-1 space-y-2 text-xs text-slate-600 dark:text-slate-400">
                     <li>✓ Everything in Free</li>
-                    <li>✓ Unlimited coins</li>
+                    <li>✓ Unlimited coins &amp; transactions</li>
                     <li>✓ Exchange history import (Coinbase, Binance, Kraken, Robinhood)</li>
                     <li>✓ Transaction ledger</li>
                     <li>✓ Price alerts + email notifications</li>

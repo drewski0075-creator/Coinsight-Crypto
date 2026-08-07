@@ -48,7 +48,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     q: "What's the difference between Free, Pro, and Max?",
     a: (
       <>
-        Free tracks up to 10 coins with 60-second price refresh. Pro ($7.99/mo or $80/yr) adds unlimited
+        Free tracks up to 10 coins with 60-second price refresh. Pro ($7.99/mo or $80/yr) adds unlimited coins &amp; transactions,
         coins, exchange history import (CSV), transaction ledger, price alerts, multi-wallet support, 30-second refresh, and
         ad-free. Max ($9.99/mo or $100/yr) adds FIFO lot tracking, realized P&L, per-lot cost basis, and
         tax-ready reports. All tiers include real-time CoinGecko pricing. Start free and upgrade whenever

@@ -9,6 +9,8 @@ export const Route = createFileRoute("/")({
 type Cell = true | false | string;
 
 const compareRows: { feature: string; free: Cell; pro: Cell; max: Cell }[] = [
+  { feature: "Transactions"
+    , free: "No limit", pro: "No limit", max: "No limit" },
   { feature: "Coins tracked", free: "Up to 10", pro: "Unlimited", max: "Unlimited" },
   { feature: "Price refresh", free: "60 seconds", pro: "30 seconds", max: "30 seconds" },
   { feature: "Real-time CoinGecko prices", free: true, pro: true, max: true },
@@ -215,7 +217,7 @@ function Home() {
           <ul className="mx-auto mb-8 max-w-md space-y-3 text-left">
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-green-500">✓</span>
-              <span className="text-slate-700 dark:text-slate-300"><strong>Unlimited coins</strong> — track as many as you want</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Unlimited coins &amp; transactions</strong> — no caps, no hidden limits</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-green-500">✓</span>
@@ -364,7 +366,7 @@ function Home() {
           <ul className="mx-auto mb-8 max-w-md space-y-3 text-left">
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-purple-500">✓</span>
-              <span className="text-slate-700 dark:text-slate-300"><strong>Everything in Pro</strong> — unlimited coins, exchange history import, ledger, alerts, multi-wallet &amp; more</span>
+              <span className="text-slate-700 dark:text-slate-300"><strong>Everything in Pro</strong> — unlimited coins &amp; transactions, exchange history import, ledger, alerts, multi-wallet &amp; more</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="mt-0.5 text-purple-500">✓</span>
