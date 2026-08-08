@@ -1,5 +1,6 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { SYMBOL_MAP } from "~/constants";
 import {
   checkAuthFn, exportTaxCsvFn, exportTaxPdfFn, getAuthFn, trackPageViewFn,
   createShareLinkFn, revokeShareLinkFn, listShareLinksFn,
@@ -355,8 +356,8 @@ function Reports() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => { (async () => { try { const auth = await getAuthFn(); if (!auth.user) return; setIsPro(auth.user.is_pro === 1); setIsMax(auth.user.is_max === 1); setEmail(auth.user.email); setHoldings(auth.holdings); const ids = [...new Set(auth.holdings.map((h) => h.coin_id))]; if (ids.length) { const r = await fetch(`/api/coingecko/prices?ids=${ids.join(",")}`); const data = await r.json(); const mapped: Record<string, number> = {}; for (const h of auth.holdings) mapped[h.coin_id] = data[h.coin_id]?.usd ?? 0; setPrices(mapped); } } catch { setError("Unable to load portfolio data."); } finally { setLoading(false); } })(); }, []);
-  const wealth = useMemo(() => holdings.reduce((n, h) => n + h.amount * (prices[h.coin_id] || 0), 0), [holdings, prices]);
+  useEffect(() => { (async () => { try { const auth = await getAuthFn(); if (!auth.user) return; setIsPro(auth.user.is_pro === 1); setIsMax(auth.user.is_max === 1); setEmail(auth.user.email); setHoldings(auth.holdings); const ids = [...new Set(auth.holdings.map((h) => SYMBOL_MAP[h.symbol.toUpperCase()]?.id).filter(Boolean))]; if (ids.length) { const r = await fetch(`/api/coingecko/prices?ids=${ids.join(",")}`); const data = await r.json(); const mapped: Record<string, number> = {}; for (const h of auth.holdings) { const symbol = h.symbol.toUpperCase(); const coinId = SYMBOL_MAP[symbol]?.id; if (coinId) mapped[symbol] = data[coinId]?.usd ?? 0; } setPrices(mapped); } } catch { setError("Unable to load portfolio data."); } finally { setLoading(false); } })(); }, []);
+  const wealth = useMemo(() => holdings.reduce((n, h) => n + h.amount * (prices[h.symbol.toUpperCase()] || 0), 0), [holdings, prices]);
   const cost = useMemo(() => holdings.reduce((n, h) => n + (h.cost_basis || h.amount * (h.purchase_price || 0)), 0), [holdings]);
   const pnl = wealth - cost;
   const download = async (kind: "csv" | "pdf") => { setBusy(kind); setError(""); try { if (kind === "csv") { const csv = await exportTaxCsvFn(); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "coinsight-tax-report.csv"; a.click(); URL.revokeObjectURL(a.href); } else { const b64 = await exportTaxPdfFn(); const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" })); a.download = "coinsight-tax-summary.pdf"; a.click(); URL.revokeObjectURL(a.href); } } catch (e) { setError(e instanceof Error ? e.message : "Export failed."); } finally { setBusy(null); } };
