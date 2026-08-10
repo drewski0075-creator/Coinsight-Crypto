@@ -133,6 +133,12 @@ function Faq() {
               FAQ
             </Link>
             <Link
+              to="/compare/cointracker"
+              className="rounded-lg px-2 py-2 sm:px-4 text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            >
+              Compare
+            </Link>
+            <Link
               to="/login"
               className="rounded-lg px-2 py-2 sm:px-4 text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
             >
