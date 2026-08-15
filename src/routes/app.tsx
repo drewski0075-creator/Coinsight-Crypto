@@ -2164,7 +2164,9 @@ function App() {
               {loading && portfolioHoldings.length > 0 ? (
                 <div className="mt-1 h-10 w-48 animate-pulse rounded bg-slate-200 dark:bg-slate-600" />
               ) : (
-                <p className="mt-1 font-mono text-3xl font-bold text-slate-900 sm:text-4xl dark:text-slate-100">{fmt(portfolioPnL.totalValue)}</p>
+                <p className={`mt-1 font-mono text-3xl font-bold sm:text-4xl ${portfolioPnL.hasCostData ? (portfolioPnL.pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400') : 'text-slate-900 dark:text-slate-100'}`}>
+                  {portfolioPnL.hasCostData ? `${portfolioPnL.pnl >= 0 ? '▲' : '▼'} ${fmtCompact(Math.abs(portfolioPnL.pnl))}` : '—'}
+                </p>
               )}
               <div className="mt-3 flex flex-wrap gap-4 sm:gap-6">
                 <div>
@@ -2175,12 +2177,6 @@ function App() {
                 </div>
                 {portfolioPnL.hasCostData ? (
                   <>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Unrealized P&amp;L</p>
-                      <p className={`text-sm font-bold ${portfolioPnL.pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {portfolioPnL.pnl >= 0 ? '▲' : '▼'} {fmtCompact(Math.abs(portfolioPnL.pnl))}
-                      </p>
-                    </div>
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Unrealized Return</p>
                       <p className={`text-sm font-bold ${portfolioPnL.pnlPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
