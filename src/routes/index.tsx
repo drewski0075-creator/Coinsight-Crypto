@@ -85,6 +85,12 @@ function Home() {
               Compare
             </Link>
             <Link
+              to="/contact"
+              className="rounded-lg px-2 py-2 sm:px-4 text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            >
+              Contact
+            </Link>
+            <Link
               to="/login"
               className="rounded-lg px-2 py-2 sm:px-4 text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
             >
@@ -453,9 +459,17 @@ function Home() {
 
       {/* Footer */}
       <footer className="border-t border-slate-800 bg-slate-900 px-6 py-8 dark:border-slate-700 dark:bg-slate-950">
-        <p className="text-center text-sm text-slate-400">
-          &copy; {new Date().getFullYear()} CoinSight. All rights reserved.
-        </p>
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-sm text-slate-400 sm:flex-row">
+          <p>&copy; {new Date().getFullYear()} CoinSight. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <Link to="/faq" className="transition-colors hover:text-slate-200">
+              FAQ
+            </Link>
+            <Link to="/contact" className="transition-colors hover:text-slate-200">
+              Contact
+            </Link>
+          </div>
+        </div>
       </footer>
     </div>
   );

@@ -278,7 +278,10 @@ function CompareCoinTracker() {
             on CoinTracker's website.
           </p>
           <p className="mt-4 text-center text-sm text-slate-400">
-            &copy; {new Date().getFullYear()} CoinSight. All rights reserved.
+            &copy; {new Date().getFullYear()} CoinSight. All rights reserved.{" "}
+            <Link to="/contact" className="underline-offset-2 hover:underline">
+              Contact
+            </Link>
           </p>
         </div>
       </footer>

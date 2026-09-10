@@ -130,7 +130,13 @@ function Signup() {
 
         {/* Footer */}
         <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">
-          &copy; {new Date().getFullYear()} CoinSight. All rights reserved.
+          &copy; {new Date().getFullYear()} CoinSight. All rights reserved.{" "}
+          <Link
+            to="/contact"
+            className="font-medium text-slate-500 underline-offset-2 hover:underline dark:text-slate-400"
+          >
+            Contact
+          </Link>
         </p>
       </div>
     </div>
