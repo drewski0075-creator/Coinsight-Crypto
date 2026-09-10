@@ -69,6 +69,7 @@ import {
   buildResetEmail,
   buildAlertEmail,
   buildPurchaseConfirmationEmail,
+  buildContactEmail,
 } from "~/lib/email.server";
 import bcrypt from "bcryptjs";
 
@@ -1278,3 +1279,46 @@ export const getPageViewStatsFn = createServerFn().handler(async () => {
   if (!user || user.is_pro !== 1) throw new Error("Page view stats require the Pro plan.");
   return getPageViewStats();
 });
+
+/* ------------------------------------------------------------------ */
+/*  Contact form: send message to the owner                             */
+/* ------------------------------------------------------------------ */
+const CONTACT_EMAIL = "coinsightdashcrypto@gmail.com";
+
+export const sendContactFn = createServerFn({ method: "POST" }).handler(
+  async (input: {
+    data: { name: string; email: string; message: string; website?: string };
+  }) => {
+    const { name, email, message, website } = input.data ?? {};
+
+    // Honeypot: bots fill hidden fields. Pretend success so they move on.
+    if (website) {
+      return { success: true };
+    }
+
+    const cleanName = (name ?? "").trim().slice(0, 120);
+    const cleanEmail = (email ?? "").trim().toLowerCase();
+    const cleanMessage = (message ?? "").trim();
+
+    if (!cleanName) return { success: false, error: "Please enter your name." };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+      return { success: false, error: "Please enter a valid email address." };
+    }
+    if (cleanMessage.length < 5) {
+      return { success: false, error: "Please enter a message (a few words at least)." };
+    }
+    if (cleanMessage.length > 5000) {
+      return { success: false, error: "Your message is too long — please keep it under 5,000 characters." };
+    }
+
+    const content = buildContactEmail(cleanName, cleanEmail, cleanMessage);
+    await sendEmail({
+      to: CONTACT_EMAIL,
+      subject: content.subject,
+      html: content.html,
+      replyTo: cleanEmail,
+    });
+
+    return { success: true };
+  },
+);

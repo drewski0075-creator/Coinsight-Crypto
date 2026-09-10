@@ -1,12 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { trackPageViewFn } from "~/server-fns";
+import { useEffect, useState } from "react";
+import { sendContactFn, trackPageViewFn } from "~/server-fns";
 
 export const Route = createFileRoute("/contact")({
   component: Contact,
 });
-
-const CONTACT_EMAIL = "coinsightdashcrypto@gmail.com";
 
 function Contact() {
   useEffect(() => {
@@ -83,8 +81,8 @@ function Contact() {
               <div className="space-y-4 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                 <p>
                   CoinSight is currently a one-person operation — just me, working alongside an AI
-                  teammate that handles most of the engineering. When you email the address below, it
-                  lands directly in my personal inbox.
+                  teammate that handles most of the engineering. When you send a message through the
+                  form below, it lands directly in my personal inbox.
                 </p>
                 <p>
                   I read every message myself, and I&apos;ll be the one who replies — but please be
@@ -95,23 +93,7 @@ function Contact() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-blue-200 bg-blue-50 p-8 text-center shadow-sm dark:border-blue-800 dark:bg-blue-900/20">
-              <p className="mb-1 text-sm font-medium text-slate-500 dark:text-slate-400">Email me directly at</p>
-              <a
-                href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("CoinSight — question")}`}
-                className="break-all text-lg font-semibold text-blue-600 underline-offset-4 hover:underline dark:text-blue-400"
-              >
-                {CONTACT_EMAIL}
-              </a>
-              <div className="mt-6">
-                <a
-                  href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("CoinSight — question")}`}
-                  className="inline-block rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-blue-700 hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
-                >
-                  Email Me
-                </a>
-              </div>
-            </div>
+            <ContactForm />
 
             <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-600 dark:bg-slate-800">
               <h2 className="mb-3 text-xl font-bold text-slate-900 dark:text-slate-100">
@@ -143,5 +125,146 @@ function Contact() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function ContactForm() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [website, setWebsite] = useState(""); // honeypot
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (status === "sending") return;
+    setStatus("sending");
+    setError("");
+
+    try {
+      const res = await sendContactFn({ data: { name, email, message, website } });
+      if (res.success) {
+        setStatus("sent");
+        setName("");
+        setEmail("");
+        setMessage("");
+      } else {
+        setStatus("error");
+        setError(res.error ?? "Something went wrong. Please try again.");
+      }
+    } catch {
+      setStatus("error");
+      setError("Something went wrong sending your message. Please try again.");
+    }
+  }
+
+  if (status === "sent") {
+    return (
+      <div className="rounded-xl border border-green-200 bg-green-50 p-8 text-center shadow-sm dark:border-green-800 dark:bg-green-900/20">
+        <h2 className="mb-2 text-xl font-bold text-green-800 dark:text-green-300">Message sent! 🎉</h2>
+        <p className="mb-6 text-sm leading-relaxed text-green-700 dark:text-green-400">
+          Thanks for reaching out. I&apos;ll read it personally and reply as soon as I can — usually
+          within a few days.
+        </p>
+        <button
+          type="button"
+          onClick={() => setStatus("idle")}
+          className="rounded-lg border border-green-600 px-5 py-2 text-sm font-medium text-green-700 transition-colors duration-150 hover:bg-green-100 dark:border-green-500 dark:text-green-300 dark:hover:bg-green-900/30"
+        >
+          Send another message
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-600 dark:bg-slate-800"
+    >
+      <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Send a message</h2>
+
+      {/* Honeypot field — hidden from real users, catches bots */}
+      <div className="absolute -left-[9999px] top-auto" aria-hidden="true">
+        <label htmlFor="website">Website</label>
+        <input
+          id="website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+        />
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="name" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Your name
+          </label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            required
+            maxLength={120}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+            placeholder="Jane Doe"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Your email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            maxLength={254}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="message" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Message
+          </label>
+          <textarea
+            id="message"
+            name="message"
+            required
+            maxLength={5000}
+            rows={5}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+            placeholder="Tell me what's on your mind…"
+          />
+        </div>
+
+        {status === "error" && error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={status === "sending"}
+          className="w-full rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-blue-700 hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {status === "sending" ? "Sending…" : "Send Message"}
+        </button>
+      </div>
+    </form>
   );
 }

@@ -20,13 +20,14 @@ interface EmailOptions {
   to: string;
   subject: string;
   html: string;
+  replyTo?: string;
 }
 
 /**
  * Send an email via Resend API. Falls back to local queue if Resend is unavailable.
  */
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; method: string }> {
-  const { to, subject, html } = options;
+  const { to, subject, html, replyTo } = options;
 
   // Try Resend API first
   if (RESEND_API_KEY) {
@@ -42,6 +43,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
           to: [to],
           subject,
           html,
+          ...(replyTo ? { reply_to: [replyTo] } : {}),
         }),
         signal: AbortSignal.timeout(10000),
       });
@@ -61,7 +63,11 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
 
   writeFileSync(
     filepath,
-    JSON.stringify({ from: FROM_ADDRESS, to, subject, html, sent_at: new Date().toISOString() }, null, 2),
+    JSON.stringify(
+      { from: FROM_ADDRESS, to, subject, html, reply_to: replyTo ?? null, sent_at: new Date().toISOString() },
+      null,
+      2,
+    ),
   );
 
   return { success: true, method: "queue" };
@@ -70,6 +76,25 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
 /* ------------------------------------------------------------------ */
 /*  Email templates                                                     */
 /* ------------------------------------------------------------------ */
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return c;
+    }
+  });
+}
 
 function baseTemplate(title: string, body: string): string {
   return `<!DOCTYPE html>
@@ -208,6 +233,30 @@ export function buildPurchaseConfirmationEmail(): { subject: string; html: strin
       Thank you for supporting CoinSight! Head to your dashboard to explore all Pro features.
     </p>
     <a href="https://b7b7222827a9407fadc1f53cb3561c0d.ctonew.app/app" style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:15px;font-weight:600;padding:12px 28px;border-radius:8px;text-decoration:none;">Go to Dashboard</a>
+  `;
+  return { subject, html: baseTemplate(subject, body) };
+}
+
+export function buildContactEmail(
+  name: string,
+  email: string,
+  message: string,
+): { subject: string; html: string } {
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeMessage = escapeHtml(message);
+  const subject = `New CoinSight message from ${name}`;
+  const body = `
+    <h2 style="margin:0 0 16px;font-size:20px;color:#0f172a;">New contact message</h2>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#475569;">
+      <strong>From:</strong> ${safeName} &lt;<a href="mailto:${safeEmail}" style="color:#2563eb;">${safeEmail}</a>&gt;
+    </p>
+    <div style="margin:0 0 16px;padding:16px;background-color:#f1f5f9;border-radius:8px;font-size:15px;line-height:1.6;color:#0f172a;white-space:pre-wrap;word-break:break-word;">
+      ${safeMessage}
+    </div>
+    <p style="margin:0 0 24px;font-size:13px;color:#94a3b8;">
+      Reply directly to this email to respond to ${safeName}.
+    </p>
   `;
   return { subject, html: baseTemplate(subject, body) };
 }
